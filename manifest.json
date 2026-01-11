@@ -4,10 +4,31 @@
     "version": "1.0.0",
     "description": "An extension to help you learn and retain vocabulary knowledge effectively.",
     "icons": {
-        "16": "icons/LEARNWIZE_16.png",
-        "32": "icons/LEARNWIZE_32.png",
-        "48": "icons/LEARNWIZE_48.png",
-        "128": "icons/LEARNWIZE_128.png",
-        "500": "icons/LEARNWIZE_500.png"
-    }
+        "16": "icons/LEARNWISE_16.png",
+        "32": "icons/LEARNWISE_32.png",
+        "48": "icons/LEARNWISE_48.png",
+        "128": "icons/LEARNWISE_128.png",
+        "500": "icons/LEARNWISE_500.png"
+    },
+    "background": {
+        "service_worker": "JSs/background.js"
+    },
+    "permissions": ["storage", "tabs", "windows"],
+    "action": {
+        "default_title": "LearnWise",
+        "default_icon": {
+            "16": "icons/LEARNWISE_16.png",
+            "32": "icons/LEARNWISE_32.png",
+            "48": "icons/LEARNWISE_48.png",
+            "128": "icons/LEARNWISE_128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["JSs/contentScript.js"],
+            "run_at": "document_idle"
+        }
+    ]
+
 }
