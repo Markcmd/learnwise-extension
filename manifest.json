@@ -29,6 +29,12 @@
             "js": ["JSs/contentScript.js"],
             "run_at": "document_idle"
         }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["ecdict_json/*.json"],
+            "matches": ["<all_urls>"]
+        }
     ]
 
 }
