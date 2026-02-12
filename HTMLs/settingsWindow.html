@@ -4,9 +4,31 @@
   <title>LearnWise</title>
 </head>
 <body>
-  <h1>LearnWise Word Bank</h1>
-  <div id="app"></div>
+  <h1>LearnWise Settings</h1>
+  <div id="app">
+    <div style="margin: 12px 0;">
+      <button id="btnRefresh">Refresh</button>
+      <button id="btnDownload">Download</button>
+      <!-- <button id="btnClear" style="margin-left: 8px;">Clear Word Bank</button> -->
+    </div>
 
-  <script src="popup.js"></script>
+    <div id="status" style="font-size: 12px; opacity: 0.8; margin: 6px 0;"></div>
+
+    <table border="1" cellspacing="0" cellpadding="6" style="border-collapse: collapse; width: 100%;">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Word</th>
+          <th style="text-align:left;">Meaning</th>
+          <th style="text-align:left;">Pronunciation</th>
+          <th style="text-align:right;">Level</th>
+          <th style="text-align:right;">Read</th>
+          <th style="text-align:left;">Updated</th>
+        </tr>
+      </thead>
+      <tbody id="wordbankRows"></tbody>
+    </table>
+  </div>
+  
+  <script src="../JSs/settingsWindow.js"></script>
 </body>
 </html>

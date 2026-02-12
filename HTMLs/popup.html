@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LearnWise</title>
+    <!-- defer means to load the script after the HTML is parsed -->
+    <script src="../JSs/popup.js" defer></script>
+    <link rel="stylesheet" href="../CSSs/popup.css" />
+
+  </head>
+  <body>
+    <div class="row">
+      <div>
+        <div><b>Enable extension</b></div>
+      </div>
+
+      <label class="switch" aria-label="Enable extension">
+        <input id="enableToggle" type="checkbox" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="hint"><b>Translation source</b></div>
+      </div>
+
+      <select id="translationSource" aria-label="Translation source">
+        <option value="local">local</option>
+        <option value="api">API</option>
+      </select>
+    </div>
+
+    <button id="openSettings">Open SettingsWindow</button>
+    
+  </body>
+</html>

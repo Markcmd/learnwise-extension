@@ -13,6 +13,7 @@
     "background": {
         "service_worker": "JSs/background.js"
     },
+    "host_permissions": ["https://api.learn-wise.net/*"],
     "permissions": ["storage", "tabs", "windows"],
     "action": {
         "default_title": "LearnWise",
@@ -21,7 +22,8 @@
             "32": "icons/LEARNWISE_32.png",
             "48": "icons/LEARNWISE_48.png",
             "128": "icons/LEARNWISE_128.png"
-        }
+        },
+        "default_popup": "HTMLs/popup.html"
     },
     "content_scripts": [
         {

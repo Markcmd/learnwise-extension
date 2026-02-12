@@ -1,0 +1,66 @@
+body { 
+    margin: 12px; 
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    min-width: 280px;
+    min-height: 160px;
+}
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.hint { font-size: 12px; opacity: 0.8; margin-top: 6px; }
+button { width: 100%; padding: 10px 12px; cursor: pointer; }
+
+/* --- Slider toggle (iOS-style) --- */
+.switch {
+position: relative;
+display: inline-block;
+width: 46px;
+height: 26px;
+flex: 0 0 auto;
+}
+
+.switch input {
+opacity: 0;
+width: 0;
+height: 0;
+}
+
+.slider {
+position: absolute;
+cursor: pointer;
+inset: 0;
+background-color: #cfcfcf;
+transition: 0.2s;
+border-radius: 999px;
+}
+
+.slider:before {
+position: absolute;
+content: "";
+height: 20px;
+width: 20px;
+left: 3px;
+top: 3px;
+background-color: white;
+transition: 0.2s;
+border-radius: 50%;
+box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+
+.switch input:checked + .slider {
+background-color: #34c759;
+}
+
+.switch input:focus + .slider {
+box-shadow: 0 0 0 3px rgba(52,199,89,0.25);
+}
+
+.switch input:checked + .slider:before {
+transform: translateX(20px);
+}
+
+
+.hint { font-size: 12px; opacity: 0.8; }
+select#translationSource {
+max-width: 170px;
+padding: 6px 8px;
+border-radius: 8px;
+}

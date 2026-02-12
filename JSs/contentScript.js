@@ -1,36 +1,117 @@
-// --- small helper: Promise wrappers ---
+// =====================================================================
+//          Helper: Promise wrappers for chrome.storage.local
+// =====================================================================
+/**
+ * @summary Read values from chrome.storage.local via a Promise.
+ * @description Wraps the callback-based `chrome.storage.local.get` API.
+ * @param {string[]|string|Object|null}
+ * @returns {Promise<Object>}
+ * @remarks The returned object only includes the requested keys; missing keys are `undefined`.
+ */
 function getLocal(keys) {
   return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
 }
+/**
+ * @summary Write values to chrome.storage.local via a Promise.
+ * @description Wraps the callback-based `chrome.storage.local.set`.
+ * @param {Object} obj Key/value pairs to store in local storage.
+ * @returns {Promise<void>}
+ * @remarks The Promise resolves after Chrome finishes writing. Errors (if any) should be checked using `chrome.runtime.lastError`.
+ */
 function setLocal(obj) {
   return new Promise((resolve) => chrome.storage.local.set(obj, resolve));
 }
 
-// --- 1) ensure wordbank exists (and keep meta flags) ---
-async function ensureWordBank() {
-  const res = await getLocal(["wordbank"]);
-  if (!res.wordbank || typeof res.wordbank !== "object" || Array.isArray(res.wordbank)) {
-    await setLocal({ wordbank: {} });
-  }
+// =============================================================================
+//                Helper: Enable LearnWise
+// =============================================================================
+/**
+ * @summary Read the LearnWise enable/disable toggle.
+ * @description
+ * - Loads the boolean flag `lw_enabled` from `chrome.storage.local` and returns it.
+ * - If the key is missing or not a boolean, defaults to `true` (enabled).
+ * @returns {Promise<boolean>} Whether LearnWise is enabled.
+ * @remarks
+ * - Storage key: `lw_enabled`
+ * - Default behavior: enabled when unset/invalid.
+ */
+async function isLearnWiseEnabled() {
+  const res = await getLocal(["lw_enabled"]);
+  return typeof res.lw_enabled === "boolean" ? res.lw_enabled : true; // default ON
 }
 
-// --- 2) upsert many words then write ONCE ---
-async function upsertWordsIntoBank(words) { // words: { [word: string]: { meaning?: string, pronunciation?: string } }
-  // read existing bank once
-  const { wordbank = {} } = await getLocal(["wordbank"]); // 不知道为啥要 default {}，但保险起见，保留 吧 !! 
+// =============================================================================
+//               Helper: Word Bank Management
+// =============================================================================
+/**
+ * @summary Check whether the word bank exists in chrome.storage.local.
+ * @description
+ * - Reads `wordbank` from `chrome.storage.local` and validates that it is a plain object
+ * - (not missing, not null, and not an array).
+ * @returns {Promise<boolean>}
+ * @remarks
+ * - Storage key: `wordbank`
+ * - `res` is the resolved storage result object (not a Promise). !!
+ */
+async function isWordBankExist() {
+  const res = await getLocal(["wordbank"]); // res is a pr
+  return !!(res.wordbank && typeof res.wordbank === "object" && !Array.isArray(res.wordbank));
+}
 
+/**
+ * @summary Create an empty word bank in chrome.storage.local.
+ * @description Initializes the `wordbank` key to an empty object `{}`.
+ * @returns {Promise<void>}
+ * @remarks Used during first-run initialization when `wordbank` is missing or invalid.
+ */
+async function createEmptyWordBank() {
+  await setLocal({ wordbank: {} });
+}
+
+/**
+ * @summary Upsert multiple words into the word bank and update stats.
+ * @description
+ * Reads the current `wordbank` from `chrome.storage.local`, then inserts or updates
+ * each word from `words` in memory and writes the updated `wordbank` back once.
+ *
+ * New word behavior:
+ * - Initializes `{ level: 1, readCount: 1, createdAt, updatedAt }`.
+ * - Copies `meaning` / `pronunciation` from input if provided.
+ * - If `options.level` is a valid integer in `[1, 100]`, uses it instead of `1`.
+ *
+ * Existing word behavior:
+ * - `readCount += 1`
+ * - `level += 1` (capped at `100`)
+ * - Updates `updatedAt`
+ * - Fills missing `meaning` / `pronunciation` only if currently empty.
+ *
+ * @param {Object} words Map of `{ [wordLowerOrRaw: string]: { meaning?: string, pronunciation?: string, level?: number } }`.
+ * @returns {Promise<void>}
+ * @remarks
+ * - Input keys are normalized to lowercase via `String(...).trim().toLowerCase()`.
+ * - This function performs exactly one read and one write to `chrome.storage.local`.
+ */
+async function upsertWordsIntoBank(words) {
+  // Validate input words object
+  const entries = words && typeof words === "object" ? words : {}; 
+  
+  // Load and validate existing wordbank
+  const { wordbank = {} } = await getLocal(["wordbank"]);
+  
+  // Get current timestamp for createdAt/updatedAt fields
   const now = Date.now();
-  const entries = words && typeof words === "object" ? words : {}; // the reason for this extra check is to avoid someone passing a non-object by mistake
 
-  // upsert in memory
-  for (const [rawWord, optionsRaw] of Object.entries(entries)) { // entries: { [word: string]: { meaning?: string, pronunciation?: string } }
-    const key = String(rawWord).trim().toLowerCase(); // normalize to lower case
-    if (!key) continue; // skip empty keys
+  // Upsert in memory
+  for (const [rawWord, optionsRaw] of Object.entries(entries)) {
+    // Preliminary normalization and validation of the word key
+    const key = String(rawWord).trim().toLowerCase();
+    if (!key) continue;
 
-    const options = optionsRaw && typeof optionsRaw === "object" ? optionsRaw : {}; // extra check to avoid errors
+    // Validate options object for this word
+    const options = optionsRaw && typeof optionsRaw === "object" ? optionsRaw : {};
 
-    // structure of word entry:
-    if (!wordbank[key]) {     // new entry
+    // Handle new vs existing entry
+    if (!wordbank[key]) {// New
       wordbank[key] = {
         word: key,
         meaning: options.meaning || "",
@@ -40,27 +121,32 @@ async function upsertWordsIntoBank(words) { // words: { [word: string]: { meanin
         createdAt: now,                         // timestamp
         updatedAt: now                          // timestamp
       };
-      // if option has level use it ( this logic can be changed as needed )
-      if (options.level && Number.isInteger(options.level) && options.level >= 1 && options.level <= 100) {
-        wordbank[key].level = options.level;
-      }
-    } else {                  // existing entry, update stats
+      // Ignore! if I am not bored enough to implement the options.level logic for now, since it's not very reliable and I can just click to increase level if I already know it. This is simpler and more consistent for all new words.
+      // // if option has level use it ( this logic can be changed as needed )
+      // if (options.level && Number.isInteger(options.level) && options.level >= 1 && options.level <= 100) {
+      //   wordbank[key].level = options.level;
+      // } 
+      // on 2/12/2026: after testing, I think it's better to just start with level 1 for new words, and let the user click to increase level if they already know it. This is because the options.level is not very reliable, and it's simpler to just have a consistent starting point for all new words.
+    } else {// Existing
       const entry = wordbank[key];                          // get existing entry
       entry.readCount = (entry.readCount || 0) + 1;         // increment read count
       entry.level = Math.min((entry.level || 1) + 1, 100);  // increment level, max 100
       entry.updatedAt = now;                                // update timestamp
-
+      
+      console.log(`[LearnWise] Updated word: "${key}", new level: ${entry.level}, readCount: ${entry.readCount}`);
       // only fill meaning/pronunciation if empty
       // this logic can be changed as needed (like nlp suggestions)
       if (!entry.meaning && options.meaning) entry.meaning = options.meaning;
       if (!entry.pronunciation && options.pronunciation) entry.pronunciation = options.pronunciation;
     }
   }
-  // write once
+  // Write back
   await setLocal({ wordbank });
 }
 
-// --- Helper: most common words list ---
+// ============================================================================
+//             Helper: Most Common Words List (for quick lookup and rendering)
+// ============================================================================
 const mostCommonWordsListFromGPT = { // this can be replaced by a more comprehensive list later, such as test results from corpora
   // add "close" "philosophy" "science" "psychology" "society"
   "close": { meaning: "关闭；接近", pronunciation: "kloʊs" },
@@ -172,8 +258,7 @@ const mostCommonWordsListFromGPT = { // this can be replaced by a more comprehen
 };
 // add level 100 to most Common Words // this part is stupid but ok, i just don't want to modify the original list from GPT
 for (const w of Object.keys(mostCommonWordsListFromGPT)) {
-  // randomly assign level 20-100 for testing
-  // const randomLevel = Math.floor(Math.random() * 81) + 20; // 20 to 100
+  
   mostCommonWordsListFromGPT[w].level = 100;
 }
 function mostCommonWordsList() {
@@ -250,6 +335,60 @@ async function getVisibleWordsInViewport() {
   return words;
 }
 
+// ======================================================================
+//      Click handler: mark a rendered word as known (level = 100)
+// ======================================================================
+let LW_CLICK_HANDLER_INSTALLED = false;
+
+async function markWordKnown(wordLower) {
+  const key = String(wordLower || "").trim().toLowerCase();
+  if (!key) return;
+
+  const { wordbank = {} } = await getLocal(["wordbank"]);
+  const now = Date.now();
+
+  if (!wordbank[key] || typeof wordbank[key] !== "object") {
+    // if missing, create minimal entry
+    wordbank[key] = {
+      word: key,
+      meaning: "",
+      pronunciation: "",
+      level: 100,
+      readCount: 1,
+      createdAt: now,
+      updatedAt: now
+    };
+  } else {
+    wordbank[key].level = 100;
+    wordbank[key].updatedAt = now;
+  }
+
+  await setLocal({ wordbank });
+}
+
+function installRubyClickHandlerOnce() {
+  if (LW_CLICK_HANDLER_INSTALLED) return;
+  LW_CLICK_HANDLER_INSTALLED = true;
+
+  document.addEventListener(
+    "click",
+    (e) => {
+      const ruby = e.target?.closest?.("ruby.learnwise-ruby");
+      if (!ruby) return;
+
+      const w = String(ruby.dataset?.lwWord || "").trim().toLowerCase();
+      if (!w) return;
+
+      markWordKnown(w).catch((err) => console.warn("[LearnWise] markWordKnown failed:", err));
+
+      // Optional: immediately remove ruby after marking known (since level>=90 => noshow)
+      const base = ruby.firstChild?.nodeType === Node.TEXT_NODE ? ruby.firstChild.nodeValue : w;
+      ruby.replaceWith(document.createTextNode(base));
+    },
+    true
+  );
+}
+
 // =====================================================================
 //                 Helper: Split Visible Words into Sets
 // =====================================================================
@@ -257,6 +396,7 @@ async function getVisibleWordsInViewport() {
 //  - if word in wordbank and level >= 90 => noshow
 //  - if word in wordbank and level < 90  => show
 //  - if word not in wordbank            => unknown
+// Note: show Set includes unknown words.
 async function splitVisibleWordsIntoSets(visibleWords) {
   const show = new Set();
   const noshow = new Set();
@@ -274,6 +414,7 @@ async function splitVisibleWordsIntoSets(visibleWords) {
       if (level >= 90) noshow.add(word);
       else show.add(word);
     } else {                                              // not found in wordbank
+      show.add(word); 
       unknown.add(word);
     }
   }
@@ -356,54 +497,180 @@ async function fetchMeaningsForUnknownWords(words) {
   return results;
 }
 
-// =====================================================================
-//        Helper: Render Show Set with Ruby Annotations (translations)
-// =====================================================================
-// Walk visible text nodes and wrap words in `showSet` with:
-//   <ruby class="learnwise-ruby"><rb>WORD</rb><rt>中文</rt></ruby>
-// Notes:
-//  - Uses wordbank meanings (already upserted) as the translation source.
-//  - Avoids SCRIPT/STYLE/NOSCRIPT and editable fields.
-//  - Skips nodes already inside <ruby> to prevent double-wrapping.
-async function renderSetUseRubys(showSet) {
-  if (!(showSet instanceof Set) || showSet.size === 0) return;        // check input validity
+// ====================================================================
+//               Helper: Translation Decision Maker
+// ====================================================================
+/**
+ * @summary Decide which translation backend to use.
+ * @description
+ * Reads the user's translation preference from `chrome.storage.local`
+ * using the key `translation_source` and normalizes the value for
+ * downstream logic.
+ * @remarks
+ * This function is the single source of truth for translation routing.
+ * If the stored value is missing or invalid, it is normalized to `"local"`.
+ * Intended to bridge popup UI configuration and content-script execution.
+ * @returns {Promise<"local" | "api">} The normalized translation source.
+ */
+async function getTranslationDecision() {
+  const res = await getLocal(["translation_source"]);
+  let source = res.translation_source;
 
-  // Load wordbank once
-  const { wordbank = {} } = await getLocal(["wordbank"]);
+  // Basic Validation ✅
+  if (typeof source === "undefined") {
+    source = "local";
+    await setLocal({ translation_source: source });
+  }
+  return source;
+}
+
+// ====================================================================
+//               Helper: Fetch Translation from Local Dictionary API
+// ====================================================================
+/**
+ * @summary Fetch translations from the local ECDICT dictionary.
+ *
+ * @description
+ * Looks up each word in the local ECDICT shards and returns a translation
+ * dictionary compatible with the rendering pipeline.
+ *
+ * @remarks
+ * - Uses `wordExistsInEcdict()` and shard caching (no network calls).
+ * - Words not found in ECDICT are returned with empty meaning/pronunciation.
+ * - Does not throw; always resolves to an object.
+ *
+ * @param {string[]} words Lowercased words to translate.
+ * @returns {Promise<Record<string, { meaning: string, pronunciation: string }>>}
+ */
+async function fetchTranslationFromLocalDictionaryAPI(words) {
+  const out = {};
+
+  const arr = Array.isArray(words) ? words : [];
+  for (const raw of arr) {
+    const key = String(raw || "").trim().toLowerCase();
+    if (!key) continue;
+
+    const entry = await wordExistsInEcdict(key);
+
+    if (entry) {
+      out[key] = {
+        meaning: entry.t || "",
+        pronunciation: entry.p || ""
+      };
+    } else {
+      out[key] = {
+        meaning: "",
+        pronunciation: ""
+      };
+    }
+  }
+
+  return out;
+}
+
+// ====================================================================
+//              Helper: Fetch Translation from OpenAI API
+// ====================================================================
+const API_KEY = "ddsalfjlj22LKJ3LKJ43KLJ43L_DASFSLDdkfsdkfjlsdfds-dsfjkefjld0867803";
+/**
+ * 
+ * @param {*} words 
+ * @returns 
+ */
+async function fetchTranslationFromOpenAIAPI(words) {
+  // Note: words is an array
+  return {}
+}
+
+// ====================================================================
+//                Helper: Update SHOW set to dict w/ translations
+// ====================================================================
+/**
+ * @summary Build a translation dictionary for the current SHOW set.
+ * @description
+ * Converts a Set of visible words (SHOW set) into a dictionary mapping
+ * each lowercase word to its translation data:
+ * The translation backend is selected using the function getTranslationDecision()
+ * @remarks
+ * Supported translation sources:
+ * - `"local"` → `fetchTranslationFromLocalDictionaryAPI()`
+ * - `"api"`   → `fetchTranslationFromOpenAIAPI()`
+ * Input words are assumed to be normalized to lowercase by upstream logic.
+ * If an unknown translation source is encountered, an empty object is returned.
+ * @param {Set<string>} showSet Words that should be translated and annotated.
+ * @returns {Promise<Record<string, { meaning: string, pronunciation: string }>>}
+ */
+async function buildShowDictWithTranslations(showSet) {
+  const translationSource = await getTranslationDecision()
+  if (translationSource === "local") {
+    console.log("[LearnWise] Fetching translations from local dictionary API...");
+    return await fetchTranslationFromLocalDictionaryAPI(Array.from(showSet));
+  }else if (translationSource === "api") {
+    console.log("[LearnWise] Fetching translations from OpenAI API...");
+    return await fetchTranslationFromOpenAIAPI(Array.from(showSet));
+  }else{
+    console.warn("[LearnWise] Unknown translation source:", translationSource);
+    return {};
+  }
+}
+
+// ======================================================================
+//     Helper: Render SHOW dict with Ruby Annotations (translations)
+// ======================================================================
+/**
+ * @summary Render ruby annotations for words in a SHOW dictionary.
+ * @description
+ * Walks visible text nodes and wraps words found in `showDict` with:
+ *   <ruby class="learnwise-ruby" data-lw-word="word">
+ *     WORD
+ *     <rt>中文</rt>
+ *   </ruby>
+ * @remarks
+ * - `showDict` is expected to be: { [wordLower]: { meaning: string, pronunciation: string } }
+ * - Words should already be normalized to lowercase.
+ * - If a word has no usable meaning, show "n/a".
+ * - Skips SCRIPT/STYLE/NOSCRIPT, editable fields, and nodes already inside <ruby>.
+ * @param {Record<string, { meaning?: string, pronunciation?: string }>} showDict
+ * @returns {Promise<void>}
+ */
+async function renderShowDictUseRubys(showDict) {
+  if (!showDict || typeof showDict !== "object" || Array.isArray(showDict)) return;
+
+  const keys = Object.keys(showDict);
+  if (keys.length === 0) return;
+
+  const showSet = new Set(keys.map((k) => String(k || "").trim().toLowerCase()).filter(Boolean));
+  if (showSet.size === 0) return;
+
+  installRubyClickHandlerOnce();
 
   // Pick the first Chinese translation from a meaning string.
-  // Examples:
-  //  - "n. 头巾, 兜帽, 覆盖"      -> "头巾"
-  //  - "vt. 罩上；覆盖"          -> "罩上"
-  //  - "头巾, 兜帽"             -> "头巾"
   function pickFirstChineseTranslation(meaning) {
     let s = String(meaning || "").trim();
     if (!s) return "";
 
-    // 1) Only consider the first line (ECDICT may have multi-line translations)
+    // 1) Only consider the first line
     s = s.split(/\r?\n/)[0].trim();
 
-    // 2) Remove leading part-of-speech markers like "n.", "vt.", "adj.", etc.
-    //    Also remove leading bracketed labels like "[网络]" if present.
+    // 2) Remove leading bracket labels and POS markers
     s = s
       .replace(/^\s*\[[^\]]+\]\s*/g, "")
       .replace(/^\s*(?:[a-z]{1,6}\.)+\s*/i, "");
 
-    // 3) Split by common separators and take the first non-empty chunk
-    const parts = s.split(/[；;，,、\s]+/).map(x => x.trim()).filter(Boolean);
+    // 3) Split and take the first chunk
+    const parts = s.split(/[；;，,、\s]+/).map((x) => x.trim()).filter(Boolean);
     const first = parts[0] || "";
 
-    // 4) Ensure we return a Chinese chunk (if the first chunk contains extra text)
+    // 4) Ensure we return a Chinese chunk
     const m = first.match(/[\u4e00-\u9fff]+/);
     return (m ? m[0] : first).slice(0, 10);
   }
 
   // Ensure a tiny bit of CSS once per page
-  if (!document.getElementById("learnwise-ruby-style")) { // avoid duplicates 
+  if (!document.getElementById("learnwise-ruby-style")) {
     const style = document.createElement("style");
     style.id = "learnwise-ruby-style";
     style.textContent = `
-      /* Keep ruby text (Chinese) centered above the base word without per-character spacing */
       ruby.learnwise-ruby { ruby-position: over; ruby-align: center; }
       ruby.learnwise-ruby rt {
         font-size: 0.5em;
@@ -416,20 +683,20 @@ async function renderSetUseRubys(showSet) {
     document.documentElement.appendChild(style);
   }
 
-  const WORD_RE = /[A-Za-z]+(?:'[A-Za-z]+)?/g; // this means match words with optional apostrophes, to match words like "it's", "don't", etc.
+  const WORD_RE = /[A-Za-z]+(?:'[A-Za-z]+)?/g;
 
   function isElementVisible(el) {
-    if (!(el instanceof Element)) return false;                             // check if el is an Element
-    const style = getComputedStyle(el);                                     // get computed style function, returns CSSStyleDeclaration
-    if (!style) return false;                                               // check style validity
+    if (!(el instanceof Element)) return false;
+    const style = getComputedStyle(el);
+    if (!style) return false;
     if (style.display === "none" || style.visibility === "hidden") return false;
     if (parseFloat(style.opacity || "1") === 0) return false;
 
-    const rect = el.getBoundingClientRect();                                // get bounding rectangle of the element
-    if (!rect || rect.width <= 0 || rect.height <= 0) return false;         // check size validity
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
 
-    const vw = window.innerWidth || document.documentElement.clientWidth;   // viewport width
-    const vh = window.innerHeight || document.documentElement.clientHeight; // viewport height
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
 
     if (rect.bottom <= 0 || rect.right <= 0) return false;
     if (rect.top >= vh || rect.left >= vw) return false;
@@ -437,11 +704,11 @@ async function renderSetUseRubys(showSet) {
     return true;
   }
 
-  const walker = document.createTreeWalker(     // this function need 4 parameters
-    document.body,                              // root node
-    NodeFilter.SHOW_TEXT,                       // show text nodes only
-    {                                           // this position need a filter object, type: NodeFilter, with acceptNode method, which is a function
-      acceptNode(node) {                        // Study this function later, it is important!!!!!
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
         if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
         const parent = node.parentElement;
         if (!parent) return NodeFilter.FILTER_REJECT;
@@ -449,32 +716,26 @@ async function renderSetUseRubys(showSet) {
         const tag = parent.tagName;
         if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") return NodeFilter.FILTER_REJECT;
 
-        // Skip editable fields
         if (parent.closest('input, textarea, [contenteditable="true"]')) return NodeFilter.FILTER_REJECT;
-
-        // Skip anything already inside ruby
         if (parent.closest("ruby")) return NodeFilter.FILTER_REJECT;
 
         if (!isElementVisible(parent)) return NodeFilter.FILTER_REJECT;
-
-        // Fast precheck: if no alpha chars, skip
         if (!/[A-Za-z]/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
 
         return NodeFilter.FILTER_ACCEPT;
       }
     },
-    false                                       // this position is for entity reference expansion, not used here
+    false
   );
 
-  const toReplace = [];                          
+  const toReplace = [];
   let n;
-  while ((n = walker.nextNode())) {             // (n = walker.nextNode()) gets the next text node , assigns to n, and the while loop continues as long as n is not null
-    const text = n.nodeValue;                   // get text content of the node, text type is string
-    // Quick check: do we have any candidate word in this node?
-    const matches = text.match(WORD_RE);        // .match returns an array of matches or null, this checks if there are any words in the text node that match WORD_RE
+  while ((n = walker.nextNode())) {
+    const text = n.nodeValue;
+    const matches = text.match(WORD_RE);
     if (!matches) continue;
 
-    let hit = false;                            // 
+    let hit = false;
     for (const m of matches) {
       if (showSet.has(m.toLowerCase())) {
         hit = true;
@@ -498,30 +759,26 @@ async function renderSetUseRubys(showSet) {
       const start = match.index;
       const end = start + wText.length;
 
-      // Append text before match
       if (start > last) frag.appendChild(document.createTextNode(text.slice(last, start)));
 
       const key = wText.toLowerCase();
       if (showSet.has(key)) {
-        const meaning = pickFirstChineseTranslation(wordbank[key]?.meaning);
+        const rawMeaning = showDict?.[key]?.meaning;
+        const meaning = pickFirstChineseTranslation(rawMeaning);
+        const displayMeaning = meaning || "n/a";
 
-        // If we don't have a meaning yet, leave as plain text
-        if (!meaning) {
-          frag.appendChild(document.createTextNode(wText));
-        } else {
-          changed = true;
-          const ruby = document.createElement("ruby");
-          ruby.className = "learnwise-ruby";
+        changed = true;
+        const ruby = document.createElement("ruby");
+        ruby.className = "learnwise-ruby";
+        ruby.dataset.lwWord = key;
 
-          // Use a text node for the base word (better browser compatibility than <rb>)
-          ruby.appendChild(document.createTextNode(wText));
+        ruby.appendChild(document.createTextNode(wText));
 
-          const rt = document.createElement("rt");
-          rt.textContent = meaning;
+        const rt = document.createElement("rt");
+        rt.textContent = displayMeaning;
 
-          ruby.appendChild(rt);
-          frag.appendChild(ruby);
-        }
+        ruby.appendChild(rt);
+        frag.appendChild(ruby);
       } else {
         frag.appendChild(document.createTextNode(wText));
       }
@@ -529,7 +786,6 @@ async function renderSetUseRubys(showSet) {
       last = end;
     }
 
-    // Append trailing text
     if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
 
     if (changed && node.parentNode) {
@@ -538,11 +794,56 @@ async function renderSetUseRubys(showSet) {
   }
 }
 
+
+// ======================================================================
+// Testing / Open ai api fetch function // 
+// ======================================================================
+// TODO: This API Key for MVP testing only later need to set up more secure way
+async function translateJson({ sentence, words }) {
+  
+  // 1) Prepare payload for API
+  const payload = {
+    sentence: String(sentence || "").trim(),
+    words: Array.isArray(words) ? words : [],
+  };
+
+  // 2) Call Translate API
+  const res = await fetch("https://api.learn-wise.net/translate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-LearnWise-Key": API_KEY,
+    },
+    // JSON.stringify converts a JavaScript object or value to a JSON string
+    // When this need to be used: when sending data to a web server, often when sending data in an AJAX request or when submitting a form
+    body: JSON.stringify(payload)
+  });
+
+  // Basic Validation ✅
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Translate API error ${res.status}: ${errText}`);
+  }
+
+  // 3) Parse response JSON
+  const data = await res.json();
+
+  // Basic Validation ✅
+  // server.mjs returns: { ok: true, translations: { [word]: "中文" } }
+  if (!data || data.ok !== true || !data.translations || typeof data.translations !== "object") {
+    throw new Error(`Bad translate response: ${JSON.stringify(data)}`);
+  }
+
+  // 4) Return translations
+  return data.translations;
+}
+
 // =====================================================================
 //                  Pass Runner + Scroll Debounce
 // =====================================================================
+// This function debounces rapid calls to fn, ensuring it's only called. 
 function debounce(fn, waitMs) {
-  let t = null;
+  let t = null; 
   return (...args) => {
     if (t) clearTimeout(t);
     t = setTimeout(() => fn(...args), waitMs);
@@ -553,6 +854,9 @@ let LW_PASS_RUNNING = false;
 let LW_PASS_PENDING = false;
 
 async function runLearnWisePass() {
+  // Respect popup toggle
+  if (!(await isLearnWiseEnabled())) return;
+
   // Prevent overlapping passes on rapid scroll
   if (LW_PASS_RUNNING) {
     LW_PASS_PENDING = true;
@@ -561,23 +865,29 @@ async function runLearnWisePass() {
 
   LW_PASS_RUNNING = true;
   try {
-    // 4) get visible words from DOM
+    // Pass 1) get visible words from DOM
     const visibleWords = await getVisibleWordsInViewport();
     console.log(`[LearnWise] Pass: visible total=${visibleWords.length}, unique=${new Set(visibleWords).size}`);
 
-    // 5) split visible words into Sets (SHOW, NOSHOW, UNKNOWN)
-    const { show, noshow, unknown } = await splitVisibleWordsIntoSets(visibleWords);
+    // Pass 2) split visible words into Sets (SHOW, NOSHOW, UNKNOWN), SHOW contains UNKOWN
+    const { show, noshow, unknown } = await splitVisibleWordsIntoSets(visibleWords); // Type: { show: Set, noshow: Set, unknown: Set }
     console.log('[LearnWise] Pass: set sizes:', 'show=', show.size, 'noshow=', noshow.size, 'unknown=', unknown.size);
 
-    // 6) fetch meanings/pronunciations from ECDICT for unknown words
+    
     if (unknown.size > 0) {
+      // Pass 3) fetch meanings/pronunciations from ECDICT for unknown words
       const newWordsList = await fetchMeaningsForUnknownWords(Array.from(unknown));
-      // 7) upsert new words into word bank
+
+      // Pass 4) upsert new words into word bank
       await upsertWordsIntoBank(newWordsList);
     }
 
-    // 8) render show set (adds ruby above words)
-    await renderSetUseRubys(show);
+    // Pass 5) update show set with translations (for rendering)
+    const showDict = await buildShowDictWithTranslations(show); // Type: { [word]: { meaning, pronunciation } }
+
+    // Pass 6) render showDict (adds ruby above words with translations, later below pronunciation can be added as well)
+    await renderShowDictUseRubys(showDict);
+
   } finally {
     LW_PASS_RUNNING = false;
     if (LW_PASS_PENDING) {
@@ -587,59 +897,41 @@ async function runLearnWisePass() {
     }
   }
 }
-
+// =====================================================================
 // =====================================================================
 //                  Content Script Main Entry
 // =====================================================================
+// =====================================================================
 (async () => {
-  console.log("0. [LearnWise] Content script loaded.");
+  console.log("[LearnWise] Content script loaded.");
 
   // 1) ensure wordbank exists
-  await ensureWordBank();
-  console.log("1. [LearnWise] Word bank ensured.");
+  if (!(await isWordBankExist())) {
+    await createEmptyWordBank();
 
-  // 2) create word list to seed       
-  // TODO: This should be replaced by initial known words from user settings, for now we hardcode a couple of common words, need a better way later
-  //        Ask chatGPT to generate a list of 100 most common English words with their meanings and pronunciations in the same format as below
-  // Create most common words list with function calle mostCommonWordsList()
-  const knownWordsList = mostCommonWordsList(); // function defined above
-  console.log('2. [LearnWise] Known words list prepared: total=', Object.keys(knownWordsList).length);
+    // TODO: This should be replaced by Real initial known words from user settings.
+    const knownWordsList = mostCommonWordsList();
+    console.log('[LearnWise] Temporary Known words list prepared: total=', Object.keys(knownWordsList).length);
+  
+    // Upsert words
+    await upsertWordsIntoBank(knownWordsList);
+    console.log("[LearnWise] Temporary Known words upserted into word bank.");
+  }
+  console.log("[LearnWise] Word bank ensured.");
 
-  // 3) upsert words
-  await upsertWordsIntoBank(knownWordsList);
-  console.log("3. [LearnWise] Known words upserted into word bank.");
-
-  // // 4) get visible words from DOM
-  // const visibleWords = await getVisibleWordsInViewport();
-  // console.log(`4. [LearnWise] Visible words collected: total=${visibleWords.length}, unique=${new Set(visibleWords).size}`);
-
-  // // 5) split visible words into Sets (SHOW, NOSHOW, UNKNOWN)
-  // const { show, noshow, unknown } = await splitVisibleWordsIntoSets(visibleWords);
-  // console.log('5. [LearnWise] Visible words split into sets:', '\n show:', show, '\n noshow: ', noshow,'\n unknown: ', unknown);
-
-  // // 6) process unkownn: fetch meanings/pronunciations from API (not implemented here)
-  // const newWordsList = await fetchMeaningsForUnknownWords(Array.from(unknown)); // implement this function as needed // newWordsList: { [word: string]: { meaning: string, pronunciation: string } }
-  // console.log("6. [LearnWise] New words fetched for unknown words:", newWordsList);// this prints the newWordsList object to console for debugging, like property-value pairs
-
-  // // 7) upsert new words into word bank
-  // await upsertWordsIntoBank(newWordsList);
-  // console.log("7. [LearnWise] New words upserted into word bank.");
-
-  // // 8）Rendering show set            // just working version now
-  // await renderSetUseRubys(show);
-
-  // 4-8) initial pass
+  // 2) learnwise pass on initial load
   await runLearnWisePass();
 
-  // 9) Re-run pass when user scrolls / resizes so newly visible content gets ruby translations
+  // 3) learnwise pass on scroll/resize with debounce
   const schedulePass = debounce(() => {
     runLearnWisePass().catch((e) => console.warn('[LearnWise] Pass failed:', e));
   }, 250);
-
   window.addEventListener('scroll', schedulePass, { passive: true });
   window.addEventListener('resize', schedulePass);      
 
+  // Testing 
+  const testjson = { sentence: "Sure AI can do writing, but memoir not so much.", words: ["memoir", "writing"] };
+  // translateJson(testjson).then(console.log);
 
 
-  
 })();
