@@ -9,8 +9,19 @@
  * @remarks The returned object only includes the requested keys; missing keys are `undefined`.
  */
 function getLocal(keys) {
-  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.storage.local.get(keys, (res) => {
+        const err = chrome.runtime?.lastError;
+        if (err) reject(err);
+        else resolve(res);
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
+
 /**
  * @summary Write values to chrome.storage.local via a Promise.
  * @description Wraps the callback-based `chrome.storage.local.set`.
@@ -19,7 +30,17 @@ function getLocal(keys) {
  * @remarks The Promise resolves after Chrome finishes writing. Errors (if any) should be checked using `chrome.runtime.lastError`.
  */
 function setLocal(obj) {
-  return new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.storage.local.set(obj, () => {
+        const err = chrome.runtime?.lastError;
+        if (err) reject(err);
+        else resolve();
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 // =============================================================================
@@ -828,15 +849,105 @@ async function translateJson({ sentence, words }) {
 // =====================================================================
 // This function debounces rapid calls to fn, ensuring it's only called. 
 function debounce(fn, waitMs) {
-  let t = null; 
-  return (...args) => {
+  let t = null;
+  const wrapped = (...args) => {
     if (t) clearTimeout(t);
     t = setTimeout(() => fn(...args), waitMs);
   };
+  wrapped.cancel = () => {
+    if (t) clearTimeout(t);
+    t = null;
+  };
+  return wrapped;
 }
+
 
 let LW_PASS_RUNNING = false;
 let LW_PASS_PENDING = false;
+
+// =====================================================================
+// UI: Lightweight in-page toast (non-blocking)
+// =====================================================================
+function showLearnWiseToast(message) {
+  try {
+    const id = "learnwise-toast";
+
+    // If already shown, update text and reset timer.
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+
+      // Minimal, site-safe styling
+      el.style.position = "fixed";
+      el.style.top = "12px";
+      el.style.left = "50%";
+      el.style.transform = "translateX(-50%)";
+      el.style.zIndex = "2147483647";
+      el.style.maxWidth = "92vw";
+      el.style.padding = "10px 12px";
+      el.style.borderRadius = "10px";
+      el.style.border = "1px solid rgba(0,0,0,0.2)";
+      el.style.background = "rgba(20,20,20,0.92)";
+      el.style.color = "#fff";
+      el.style.fontSize = "13px";
+      el.style.lineHeight = "1.25";
+      el.style.boxShadow = "0 6px 18px rgba(0,0,0,0.25)";
+      el.style.pointerEvents = "auto";
+      el.style.cursor = "pointer";
+      el.style.userSelect = "none";
+      el.style.whiteSpace = "pre-wrap";
+
+      // Click to dismiss
+      el.addEventListener("click", () => {
+        try { el.remove(); } catch (_e) {}
+      });
+
+      document.documentElement.appendChild(el);
+    }
+
+    el.textContent = String(message || "");
+
+    // Reset auto-dismiss timer
+    if (el.__lwTimer) clearTimeout(el.__lwTimer);
+    el.__lwTimer = setTimeout(() => {
+      try { el.remove(); } catch (_e) {}
+    }, 6000);
+  } catch (_e) {
+    // no-op
+  }
+}
+
+// Centralized error handler for LearnWise passes.
+// Note: when the extension is reloaded/updated, the old content-script context becomes invalid.
+// We treat that as a shutdown signal and stop scheduling further work.
+function handlePassError(e) {
+  const msg = String(e?.message || e || "");
+
+  // If the extension context is gone, we cannot safely keep running.
+  if (msg.includes("Extension context invalidated")) {
+    console.warn("[LearnWise] Extension updated/reloaded. Please refresh this tab.");
+    showLearnWiseToast("LearnWise: extension updated. Refresh this tab to resume.");
+    
+    try {
+      schedulePass?.cancel?.();
+    } catch (_err) {
+      // ignore
+    }
+
+    try {
+      window.removeEventListener("scroll", schedulePass);
+      window.removeEventListener("resize", schedulePass);
+    } catch (_err) {
+      // ignore
+    }
+    return;
+  }
+
+  console.warn("[LearnWise] Pass failed:", e);
+}
 
 async function runLearnWisePass() {
   // Respect popup toggle
@@ -866,21 +977,23 @@ async function runLearnWisePass() {
       await insertNewWordsToBank(newWordsList);
     }
 
-    // Pass 5) update show set properties in the bank
-    await updateShowSetInBank(show);
+    if (show.size > 0){
+      // Pass 5) update show set properties in the bank
+      await updateShowSetInBank(show);
 
-    // Pass 6) update show set with translations (for rendering)
-    const showDict = await buildShowDictWithTranslations(show); // Type: { [word]: { meaning, pronunciation } }
+      // Pass 6) update show set with translations (for rendering)
+      const showDict = await buildShowDictWithTranslations(show); // Type: { [word]: { meaning, pronunciation } }
 
-    // Pass 7) render showDict (adds ruby above words with translations, later below pronunciation can be added as well)
-    await renderShowDictUseRubys(showDict);
+      // Pass 7) render showDict (adds ruby above words with translations, later below pronunciation can be added as well)
+      await renderShowDictUseRubys(showDict);
+    }
 
   } finally {
     LW_PASS_RUNNING = false;
     if (LW_PASS_PENDING) {
       LW_PASS_PENDING = false;
       // Run one more pass to catch anything missed while we were busy
-      await runLearnWisePass();
+      await runLearnWisePass().catch(handlePassError);
     }
   }
 }
@@ -907,11 +1020,11 @@ async function runLearnWisePass() {
   console.log("[LearnWise] Word bank ensured.");
 
   // 2) learnwise pass on initial load
-  await runLearnWisePass();
+  await runLearnWisePass().catch(handlePassError);
 
   // 3) learnwise pass on scroll/resize with debounce
   const schedulePass = debounce(() => {
-    runLearnWisePass().catch((e) => console.warn('[LearnWise] Pass failed:', e));
+    runLearnWisePass().catch(handlePassError);
   }, 250);
   window.addEventListener('scroll', schedulePass, { passive: true });
   window.addEventListener('resize', schedulePass);      
@@ -919,6 +1032,5 @@ async function runLearnWisePass() {
   // Testing 
   const testjson = { sentence: "Sure AI can do writing, but memoir not so much.", words: ["memoir", "writing"] };
   // translateJson(testjson).then(console.log);
-
 
 })();
