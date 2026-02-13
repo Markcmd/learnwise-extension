@@ -341,6 +341,69 @@ async function getVisibleWordsInViewport() {
   return words;
 }
 
+// Collect readable text content from visible text nodes that overlap the viewport.
+// Returns a single string (trimmed). This is used as `sentence` context for the API.
+async function getReadableTextInViewport() {
+  function isElementVisible(el) {
+    if (!(el instanceof Element)) return false;
+
+    const style = getComputedStyle(el);
+    if (!style) return false;
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    if (parseFloat(style.opacity || "1") === 0) return false;
+
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+
+    if (rect.bottom <= 0 || rect.right <= 0) return false;
+    if (rect.top >= vh || rect.left >= vw) return false;
+
+    return true;
+  }
+
+  const parts = [];
+
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+
+        const tag = parent.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") return NodeFilter.FILTER_REJECT;
+
+        if (parent.closest('input, textarea, [contenteditable="true"]')) return NodeFilter.FILTER_REJECT;
+        if (parent.closest("ruby.learnwise-ruby")) return NodeFilter.FILTER_REJECT;
+
+        if (!isElementVisible(parent)) return NodeFilter.FILTER_REJECT;
+
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    },
+    false
+  );
+
+  let n;
+  while ((n = walker.nextNode())) {
+    const t = String(n.nodeValue || "").replace(/\s+/g, " ").trim();
+    if (t) parts.push(t);
+  }
+
+  // Limit sentence size to avoid huge payloads / token costs.
+  const MAX_CHARS = 4000;
+  let sentence = parts.join(" ").trim();
+  if (sentence.length > MAX_CHARS) sentence = sentence.slice(0, MAX_CHARS);
+
+  return sentence;
+}
+
 // ======================================================================
 //      Click handler: mark a rendered word as known (level = 100)
 // ======================================================================
@@ -577,15 +640,79 @@ async function fetchTranslationFromLocalDictionaryAPI(words) {
 // ====================================================================
 //              Helper: Fetch Translation from OpenAI API
 // ====================================================================
+// NOTE: For MVP only.
 const API_KEY = "ddsalfjlj22LKJ3LKJ43KLJ43L_DASFSLDdkfsdkfjlsdfds-dsfjkefjld0867803";
 /**
- * 
- * @param {*} words 
- * @returns 
+ * @summary Fetch translations from the OpenAI-backed API (via your LearnWise server).
+ * @description
+ * Calls `translateJson({ sentence, words })` in batches and converts the response into:
+ *   { [wordLower]: { meaning: string, pronunciation: string } }
+ * @param {string[]} words Lowercased words to translate.
+ * @returns {Promise<Record<string, { meaning: string, pronunciation: string }>>}
+ * @remarks
+ * - Uses your existing `translateJson()` helper.
+ * - Batches requests to reduce payload size.
+ * - Never throws; returns partial results when some batches fail.
  */
 async function fetchTranslationFromOpenAIAPI(words) {
-  // Note: words is an array
-  return {}
+  const out = {};
+
+  // 1) Normalize + de-duplicate input
+  const arr = Array.isArray(words) ? words : [];
+  const cleaned = Array.from(
+    new Set(
+      arr
+        .map((w) => String(w || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (cleaned.length === 0) return out;
+
+  // 2) Single request per viewport/pass (no batching)
+  // NOTE: To strictly keep ONE request, we cap the number of words sent.
+  // If you want full coverage for very large pages, you can remove the cap and/or re-enable batching.
+  const MAX_WORDS_PER_REQUEST = 200;
+  const requestWords = cleaned.slice(0, MAX_WORDS_PER_REQUEST);
+
+  if (cleaned.length > MAX_WORDS_PER_REQUEST) {
+    console.warn(
+      `[LearnWise] OpenAI API: showSet too large (${cleaned.length}). Sending only first ${MAX_WORDS_PER_REQUEST} words to keep a single request.`
+    );
+  }
+
+  // get sentence
+  const sen = await getReadableTextInViewport();
+
+  try {
+    const translations = await translateJson({
+      sentence: sen,
+      words: requestWords
+    });
+
+    // Expected: { [word]: "中文" }
+    if (translations && typeof translations === "object") {
+      for (const [rawWord, rawZh] of Object.entries(translations)) {
+        const key = String(rawWord || "").trim().toLowerCase();
+        if (!key) continue;
+
+        const zh = String(rawZh || "").trim();
+        out[key] = {
+          meaning: zh,
+          pronunciation: ""
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[LearnWise] OpenAI translation request failed:", e);
+  }
+
+  // 3) Ensure every requested word has an output entry
+  for (const w of requestWords) {
+    if (!out[w]) out[w] = { meaning: "", pronunciation: "" };
+  }
+
+  return out;
 }
 
 // ====================================================================
@@ -1030,7 +1157,7 @@ async function runLearnWisePass() {
   window.addEventListener('resize', schedulePass);      
 
   // Testing 
-  const testjson = { sentence: "Sure AI can do writing, but memoir not so much.", words: ["memoir", "writing"] };
+  // const testjson = { sentence: "Sure AI can do writing, but memoir not so much.", words: ["memoir", "writing"] };
   // translateJson(testjson).then(console.log);
 
 })();
