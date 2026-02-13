@@ -68,50 +68,21 @@ async function createEmptyWordBank() {
   await setLocal({ wordbank: {} });
 }
 
-/**
- * @summary Upsert multiple words into the word bank and update stats.
- * @description
- * Reads the current `wordbank` from `chrome.storage.local`, then inserts or updates
- * each word from `words` in memory and writes the updated `wordbank` back once.
- *
- * New word behavior:
- * - Initializes `{ level: 1, readCount: 1, createdAt, updatedAt }`.
- * - Copies `meaning` / `pronunciation` from input if provided.
- * - If `options.level` is a valid integer in `[1, 100]`, uses it instead of `1`.
- *
- * Existing word behavior:
- * - `readCount += 1`
- * - `level += 1` (capped at `100`)
- * - Updates `updatedAt`
- * - Fills missing `meaning` / `pronunciation` only if currently empty.
- *
- * @param {Object} words Map of `{ [wordLowerOrRaw: string]: { meaning?: string, pronunciation?: string, level?: number } }`.
- * @returns {Promise<void>}
- * @remarks
- * - Input keys are normalized to lowercase via `String(...).trim().toLowerCase()`.
- * - This function performs exactly one read and one write to `chrome.storage.local`.
- */
-async function upsertWordsIntoBank(words) {
-  // Validate input words object
-  const entries = words && typeof words === "object" ? words : {}; 
-  
-  // Load and validate existing wordbank
+async function insertNewWordsToBank (wordsToInsert) {
   const { wordbank = {} } = await getLocal(["wordbank"]);
-  
+  // Validate input wordsToInsert object
+  const entries = wordsToInsert && typeof wordsToInsert === "object" ? wordsToInsert : {}; 
   // Get current timestamp for createdAt/updatedAt fields
   const now = Date.now();
-
   // Upsert in memory
   for (const [rawWord, optionsRaw] of Object.entries(entries)) {
     // Preliminary normalization and validation of the word key
     const key = String(rawWord).trim().toLowerCase();
-    if (!key) continue;
-
+    if (!key) continue; 
     // Validate options object for this word
     const options = optionsRaw && typeof optionsRaw === "object" ? optionsRaw : {};
-
-    // Handle new vs existing entry
-    if (!wordbank[key]) {// New
+    // Handle new entry
+    if (!wordbank[key]) {
       wordbank[key] = {
         word: key,
         meaning: options.meaning || "",
@@ -121,25 +92,36 @@ async function upsertWordsIntoBank(words) {
         createdAt: now,                         // timestamp
         updatedAt: now                          // timestamp
       };
-      // Ignore! if I am not bored enough to implement the options.level logic for now, since it's not very reliable and I can just click to increase level if I already know it. This is simpler and more consistent for all new words.
-      // // if option has level use it ( this logic can be changed as needed )
-      // if (options.level && Number.isInteger(options.level) && options.level >= 1 && options.level <= 100) {
-      //   wordbank[key].level = options.level;
-      // } 
-      // on 2/12/2026: after testing, I think it's better to just start with level 1 for new words, and let the user click to increase level if they already know it. This is because the options.level is not very reliable, and it's simpler to just have a consistent starting point for all new words.
-    } else {// Existing
-      const entry = wordbank[key];                          // get existing entry
-      entry.readCount = (entry.readCount || 0) + 1;         // increment read count
-      entry.level = Math.min((entry.level || 1) + 1, 100);  // increment level, max 100
-      entry.updatedAt = now;                                // update timestamp
-      
-      console.log(`[LearnWise] Updated word: "${key}", new level: ${entry.level}, readCount: ${entry.readCount}`);
-      // only fill meaning/pronunciation if empty
-      // this logic can be changed as needed (like nlp suggestions)
-      if (!entry.meaning && options.meaning) entry.meaning = options.meaning;
-      if (!entry.pronunciation && options.pronunciation) entry.pronunciation = options.pronunciation;
-    }
+      console.log(`[LearnWise][Test] Added new word: "${key}", level: ${wordbank[key].level}, readCount: ${wordbank[key].readCount}`);
+    } 
   }
+  await setLocal({ wordbank });
+}
+
+async function updateShowSetInBank(wordsSetToUpdate) {
+  // Load and validate existing wordbank
+  const { wordbank = {} } = await getLocal(["wordbank"]);
+
+  // Validate Set input
+  const set = wordsSetToUpdate instanceof Set ? wordsSetToUpdate : new Set();
+
+  const now = Date.now();
+  for (const rawWord of set) {
+    const key = String(rawWord || "").trim().toLowerCase();
+    if (!key) continue;
+
+    const entry = wordbank[key];
+    if (!entry || typeof entry !== "object") continue; // only update existing entries
+
+    entry.readCount = (entry.readCount || 0) + 1;
+    entry.level = Math.min((entry.level || 1) + 5, 100);
+    entry.updatedAt = now;
+
+    console.log(
+      `[LearnWise][Test] Updated word: "${key}", new level: ${entry.level}, readCount: ${entry.readCount}`
+    );
+  }
+  
   // Write back
   await setLocal({ wordbank });
 }
@@ -312,6 +294,9 @@ async function getVisibleWordsInViewport() {
 
         // Optional: skip editable fields
         if (parent.closest('input, textarea, [contenteditable="true"]')) return NodeFilter.FILTER_REJECT;
+
+        // Skip text that is already annotated by LearnWise
+        if (parent.closest('ruby.learnwise-ruby')) return NodeFilter.FILTER_REJECT;
 
         if (!isElementVisible(parent)) return NodeFilter.FILTER_REJECT;
 
@@ -872,20 +857,22 @@ async function runLearnWisePass() {
     // Pass 2) split visible words into Sets (SHOW, NOSHOW, UNKNOWN), SHOW contains UNKOWN
     const { show, noshow, unknown } = await splitVisibleWordsIntoSets(visibleWords); // Type: { show: Set, noshow: Set, unknown: Set }
     console.log('[LearnWise] Pass: set sizes:', 'show=', show.size, 'noshow=', noshow.size, 'unknown=', unknown.size);
-
     
     if (unknown.size > 0) {
       // Pass 3) fetch meanings/pronunciations from ECDICT for unknown words
       const newWordsList = await fetchMeaningsForUnknownWords(Array.from(unknown));
 
       // Pass 4) upsert new words into word bank
-      await upsertWordsIntoBank(newWordsList);
+      await insertNewWordsToBank(newWordsList);
     }
 
-    // Pass 5) update show set with translations (for rendering)
+    // Pass 5) update show set properties in the bank
+    await updateShowSetInBank(show);
+
+    // Pass 6) update show set with translations (for rendering)
     const showDict = await buildShowDictWithTranslations(show); // Type: { [word]: { meaning, pronunciation } }
 
-    // Pass 6) render showDict (adds ruby above words with translations, later below pronunciation can be added as well)
+    // Pass 7) render showDict (adds ruby above words with translations, later below pronunciation can be added as well)
     await renderShowDictUseRubys(showDict);
 
   } finally {
@@ -914,7 +901,7 @@ async function runLearnWisePass() {
     console.log('[LearnWise] Temporary Known words list prepared: total=', Object.keys(knownWordsList).length);
   
     // Upsert words
-    await upsertWordsIntoBank(knownWordsList);
+    await insertNewWordsToBank(knownWordsList);
     console.log("[LearnWise] Temporary Known words upserted into word bank.");
   }
   console.log("[LearnWise] Word bank ensured.");
