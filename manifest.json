@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "LearnWise",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "An extension to help you learn and retain vocabulary knowledge effectively.",
     "icons": {
         "16": "icons/LEARNWISE_16.png",
@@ -14,7 +14,7 @@
         "service_worker": "JSs/background.js"
     },
     "host_permissions": ["https://api.learn-wise.net/*"],
-    "permissions": ["storage", "activeTab", "windows"],
+    "permissions": ["storage", "activeTab", "scripting"],
     "action": {
         "default_title": "LearnWise",
         "default_icon": {
@@ -24,19 +24,5 @@
             "128": "icons/LEARNWISE_128.png"
         },
         "default_popup": "HTMLs/popup.html"
-    },
-    "content_scripts": [
-        {
-            "matches": ["<all_urls>"],
-            "js": ["JSs/contentScript.js"],
-            "run_at": "document_idle"
-        }
-    ],
-    "web_accessible_resources": [
-        {
-            "resources": ["ecdict_json/*.json"],
-            "matches": ["<all_urls>"]
-        }
-    ]
-
+    }
 }
