@@ -14,7 +14,7 @@
         "service_worker": "JSs/background.js"
     },
     "host_permissions": ["https://api.learn-wise.net/*"],
-    "permissions": ["storage", "tabs", "windows"],
+    "permissions": ["storage", "activeTab", "windows"],
     "action": {
         "default_title": "LearnWise",
         "default_icon": {

@@ -135,7 +135,7 @@ async function updateShowSetInBank(wordsSetToUpdate) {
     if (!entry || typeof entry !== "object") continue; // only update existing entries
 
     entry.readCount = (entry.readCount || 0) + 1;
-    entry.level = Math.min((entry.level || 1) + 5, 100);
+    entry.level = Math.min((entry.level || 1) + 0.5, 100);
     entry.updatedAt = now;
 
     console.log(
