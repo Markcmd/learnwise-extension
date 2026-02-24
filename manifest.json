@@ -14,7 +14,7 @@
         "service_worker": "JSs/background.js"
     },
     "host_permissions": ["https://api.learn-wise.net/*"],
-    "permissions": ["storage", "activeTab", "scripting"],
+    "permissions": ["storage", "activeTab", "windows"],
     "action": {
         "default_title": "LearnWise",
         "default_icon": {
@@ -24,5 +24,19 @@
             "128": "icons/LEARNWISE_128.png"
         },
         "default_popup": "HTMLs/popup.html"
-    }
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["JSs/contentScript.js"],
+            "run_at": "document_idle"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["ecdict_json/*.json"],
+            "matches": ["<all_urls>"]
+        }
+    ]
+
 }

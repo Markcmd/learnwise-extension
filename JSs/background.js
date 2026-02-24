@@ -18,21 +18,3 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// ======================================================
-// Inject contentScript.js into the active tab on icon click
-// (content_scripts removed from manifest; this is manual injection)
-// ======================================================
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.id) return;
-
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["JSs/contentScript.js"],
-    });
-
-    console.log("LearnWise: contentScript injected");
-  } catch (err) {
-    console.error("LearnWise: injection failed", err);
-  }
-});
