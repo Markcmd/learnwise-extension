@@ -36,10 +36,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log(`LearnWise is now ${toggle.checked ? "enabled" : "disabled"}.`);
   });
 
-  // get current option value 
+  // get current option value
   const res = await chrome.storage.local.get([TRANSLATION_SOURCE_KEY]);
-  // set id="translationSource" select value
-  transOpt.value = res?.[TRANSLATION_SOURCE_KEY] || "local";
+  // 'api' (BYO-key) isn't available until M1 — show local until then.
+  let current = res?.[TRANSLATION_SOURCE_KEY] || "local";
+  if (current === "api") current = "local";
+  transOpt.value = current;
   transOpt.addEventListener("change", async () => {
     const value = transOpt.value;
     await chrome.storage.local.set({ [TRANSLATION_SOURCE_KEY]: value });

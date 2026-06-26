@@ -11,10 +11,9 @@
         "500": "icons/LEARNWISE_500.png"
     },
     "background": {
-        "service_worker": "JSs/background.js"
+        "service_worker": "dist/background.js"
     },
-    "host_permissions": ["https://api.learn-wise.net/*"],
-    "permissions": ["storage", "activeTab", "windows"],
+    "permissions": ["storage", "unlimitedStorage", "activeTab"],
     "action": {
         "default_title": "LearnWise",
         "default_icon": {
@@ -28,7 +27,7 @@
     "content_scripts": [
         {
             "matches": ["<all_urls>"],
-            "js": ["JSs/contentScript.js"],
+            "js": ["dist/contentScript.js"],
             "run_at": "document_idle"
         }
     ],
@@ -38,5 +37,4 @@
             "matches": ["<all_urls>"]
         }
     ]
-
 }

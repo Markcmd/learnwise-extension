@@ -1,0 +1,17 @@
+{
+  "name": "learnwise-extension",
+  "version": "1.0.2",
+  "description": "LearnWise — a Chrome extension that glosses unknown English words inline while you read the web.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "vitest": "^2.0.0"
+  }
+}
