@@ -6,7 +6,7 @@
 // Keeping the logic pure is what makes it unit-testable.
 // =====================================================================
 import { getLocal, setLocal } from "./storage.js";
-import { STORAGE_KEYS, STOP_GLOSS_LEVEL, MAX_RECENT_CONTEXTS } from "./constants.js";
+import { STORAGE_KEYS, STOP_GLOSS_LEVEL, MAX_RECENT_CONTEXTS, DEMOTE_LEVEL } from "./constants.js";
 
 /** Normalize a raw token into a word-bank key. */
 export function normalizeWord(raw) {
@@ -149,6 +149,25 @@ export function markKnown(bank, word, now = Date.now()) {
     entry.updatedAt = now;
     entry.lastSeenAt = now;
   }
+  return bank;
+}
+
+/**
+ * Demote a "known" word back into the glossing range (pure) — the user forgot
+ * it and wants it checked again. Sets the level below STOP_GLOSS_LEVEL so it is
+ * glossed, and status to "learning". The word record (meaning, readCount, etc.)
+ * is preserved; the caller is responsible for clearing the word's events so the
+ * derived familiarity actually restarts (a clicked_known event would re-pin it).
+ * No-op for untracked words. Mutates and returns `bank`.
+ */
+export function demoteWord(bank, word, level = DEMOTE_LEVEL, now = Date.now()) {
+  const key = normalizeWord(word);
+  const entry = bank[key];
+  if (!entry || typeof entry !== "object") return bank;
+  const lvl = Math.max(1, Math.min(STOP_GLOSS_LEVEL - 1, Math.round(Number(level) || DEMOTE_LEVEL)));
+  entry.level = lvl;
+  entry.status = deriveStatus(lvl);
+  entry.updatedAt = now;
   return bank;
 }
 

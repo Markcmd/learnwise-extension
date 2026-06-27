@@ -68,9 +68,10 @@ describe("mergeTranslationsIntoBank", () => {
 });
 
 describe("normalizeSource", () => {
-  it("defaults unknown values to local", () => {
+  it("defaults unknown values to local; maps legacy 'api' to 'byok'", () => {
     expect(normalizeSource("local")).toBe("local");
-    expect(normalizeSource("api")).toBe("api");
+    expect(normalizeSource("api")).toBe("byok"); // legacy value (pre-M1.4)
+    expect(normalizeSource("byok")).toBe("byok");
     expect(normalizeSource("nonsense")).toBe("local");
     expect(normalizeSource(undefined)).toBe("local");
   });

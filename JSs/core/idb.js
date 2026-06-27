@@ -53,7 +53,7 @@ export function openDB() {
       }
     };
 
-    req.onsuccess = () => resolve(req.target.result);
+    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
     req.onblocked = () => reject(new Error("IndexedDB open blocked"));
   });

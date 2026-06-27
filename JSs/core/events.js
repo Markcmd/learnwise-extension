@@ -9,7 +9,7 @@
 // =====================================================================
 import { normalizeWord } from "./wordbank.js";
 import { IDB, EXPOSURE_ACTIONS, MAX_SENTENCE_LEN } from "./constants.js";
-import { addAll, getAll, getAllByIndex, count } from "./idb.js";
+import { addAll, getAll, getAllByIndex, count, deleteKeys } from "./idb.js";
 
 // ---------------------------------------------------------------------
 // Pure builders / helpers
@@ -159,4 +159,18 @@ export async function getEventsBefore(beforeTs) {
 /** Total number of stored exposure events. */
 export async function countEvents() {
   return count(IDB.STORES.EVENTS);
+}
+
+/**
+ * Delete every exposure event for a word (IO). Used when demoting a word so its
+ * derived familiarity restarts (otherwise an old clicked_known event re-pins it).
+ * @returns {Promise<number>} how many events were removed
+ */
+export async function deleteEventsForWord(word) {
+  const key = normalizeWord(word);
+  if (!key) return 0;
+  const rows = await getAllByIndex(IDB.STORES.EVENTS, "word", key);
+  const ids = rows.map((r) => r.id).filter((id) => id != null);
+  if (ids.length) await deleteKeys(IDB.STORES.EVENTS, ids);
+  return ids.length;
 }

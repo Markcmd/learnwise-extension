@@ -6,9 +6,55 @@
 <body>
   <h1>LearnWise Settings</h1>
   <div id="app">
+    <section style="margin: 12px 0; padding: 12px; border: 1px solid #ccc; border-radius: 8px; max-width: 640px;">
+      <h2 style="margin: 0 0 8px; font-size: 16px;">Smart translations (bring your own key)</h2>
+      <p style="font-size: 12px; opacity: 0.8; margin: 0 0 10px;">
+        Off by default. When enabled, the word and its sentence are sent to
+        <b>your own</b> AI provider account using the key below — the key is stored only on
+        this device and is never sent anywhere else. Leave the source on "local" to stay
+        fully offline. Each provider keeps its own key, so you can switch freely.
+      </p>
+
+      <div style="display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; align-items: center;">
+        <label for="translationSource">Translation source</label>
+        <select id="translationSource">
+          <option value="local">local (offline dictionary)</option>
+          <option value="byok">smart (your API key)</option>
+        </select>
+
+        <label for="byokProvider" class="byokOnly">Provider</label>
+        <select id="byokProvider" class="byokOnly"></select>
+
+        <label for="byokModel" class="byokOnly">Model</label>
+        <span id="byokModelCell" class="byokOnly">
+          <select id="byokModel"></select>
+          <input id="byokModelCustom" type="text" placeholder="model name (e.g. llama3.1)"
+                 spellcheck="false" style="display:none; font-family: monospace; width: 100%;" />
+        </span>
+
+        <label for="byokBaseUrl" id="byokBaseUrlLabel">Base URL</label>
+        <span id="byokBaseUrlRow">
+          <input id="byokBaseUrl" type="text" placeholder="http://localhost:11434/v1"
+                 spellcheck="false" style="font-family: monospace; width: 100%;" />
+          <button id="btnGrantHost" type="button" style="margin-top: 4px;">Grant access to this URL</button>
+        </span>
+
+        <label for="byokKey" class="byokOnly">API key</label>
+        <input id="byokKey" type="password" class="byokOnly" placeholder="sk-..." autocomplete="off"
+               spellcheck="false" style="font-family: monospace;" />
+      </div>
+
+      <div id="byokButtons" style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+        <button id="btnSaveKey">Save</button>
+        <button id="btnTestKey">Save &amp; test</button>
+        <span id="byokStatus" style="font-size: 12px; opacity: 0.9;"></span>
+      </div>
+    </section>
+
     <div style="margin: 12px 0;">
       <button id="btnRefresh">Refresh</button>
       <button id="btnDownload">Download</button>
+      <button id="btnOnboarding" style="margin-left: 8px;">Redo vocabulary setup</button>
       <!-- <button id="btnClear" style="margin-left: 8px;">Clear Word Bank</button> -->
     </div>
 
@@ -23,6 +69,7 @@
           <th style="text-align:right;">Level</th>
           <th style="text-align:right;">Read</th>
           <th style="text-align:left;">Updated</th>
+          <th style="text-align:left;">Actions</th>
         </tr>
       </thead>
       <tbody id="wordbankRows"></tbody>

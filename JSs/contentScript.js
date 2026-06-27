@@ -6,7 +6,7 @@
 // in importable, tested modules. esbuild bundles this into dist/.
 // =====================================================================
 import { getLocal } from "./core/storage.js";
-import { STORAGE_KEYS, STOP_GLOSS_LEVEL } from "./core/constants.js";
+import { STORAGE_KEYS, STOP_GLOSS_LEVEL, MSG } from "./core/constants.js";
 import {
   getWordBank,
   setWordBank,
@@ -16,6 +16,7 @@ import {
   applyExposures,
   splitWords,
   markKnown,
+  demoteWord,
 } from "./core/wordbank.js";
 import { runMigration } from "./core/migration.js";
 import {
@@ -35,12 +36,13 @@ import {
   appendExposures,
   getEventsForWord,
   locationForEvent,
+  deleteEventsForWord,
 } from "./core/events.js";
 import { recomputeLevels, applyDerivedLevels } from "./core/familiarity.js";
 import { scanViewport } from "./dom/scanner.js";
 import { renderRuby } from "./dom/renderer.js";
+import { installSelectionAction } from "./dom/selectionAction.js";
 import { fetchTranslationFromLocalDictionary } from "./dom/ecdict.js";
-import { mostCommonWordsList } from "./data/commonWords.js";
 
 // ---------------------------------------------------------------------
 // Settings helpers
@@ -66,13 +68,51 @@ async function shouldLogFullUrl() {
 const PAGE_LOGGED = new Set();
 
 // ---------------------------------------------------------------------
-// Translation: cache → local dictionary. (BYO-key 'api' arrives in M1.)
-// Page-level cache dedupes repeated lookups of the same word across scroll
-// passes for untracked words that aren't cached in the bank yet.
+// Translation routing: cache → (byok | local). The page-level cache dedupes
+// repeated lookups of the same word across scroll passes; the word bank
+// caches meanings permanently, so each word is fetched at most once.
+//   • local   → offline ECDICT dictionary
+//   • byok    → the user's OpenAI key, via the background worker (CORS);
+//               any word the model doesn't return falls back to local
+//   • managed → v2 (not built) → local
 // ---------------------------------------------------------------------
 const PAGE_MEANING_CACHE = new Map();
 
-async function fetchTranslations(words, _sentence) {
+// Warn the user at most once per page if smart translation degrades to local.
+let BYOK_WARNED = false;
+function warnByokOnce(message) {
+  if (BYOK_WARNED) return;
+  BYOK_WARNED = true;
+  showLearnWiseToast(`LearnWise: ${message} Using the local dictionary.`);
+}
+
+/** Ask the background worker to translate via the user's OpenAI key. */
+async function fetchViaByok(words, sentence) {
+  try {
+    const resp = await chrome.runtime.sendMessage({
+      type: MSG.TRANSLATE_BYOK,
+      words,
+      sentence,
+    });
+    if (resp && resp.ok) return resp.translations || {};
+    warnByokOnce(resp?.error?.message || "Smart translation failed.");
+    return {};
+  } catch (e) {
+    // Extension-context-invalidated etc. bubble up to the pass error handler.
+    if (String(e?.message || e).includes("Extension context invalidated")) throw e;
+    warnByokOnce("Smart translation is unavailable.");
+    return {};
+  }
+}
+
+function cacheAndCollect(out, fetched) {
+  for (const [w, d] of Object.entries(fetched)) {
+    PAGE_MEANING_CACHE.set(w, d);
+    out[w] = d;
+  }
+}
+
+async function fetchTranslations(words, sentence) {
   const out = {};
   const toLookup = [];
   for (const w of words) {
@@ -81,17 +121,27 @@ async function fetchTranslations(words, _sentence) {
   }
   if (!toLookup.length) return out;
 
-  let source = await getTranslationSource();
-  if (source === "api") {
-    // BYO-key translation isn't built yet (M1). Degrade to local cleanly.
-    console.warn("[LearnWise] 'api' translation not available yet; using local dictionary.");
-    source = "local";
+  const source = await getTranslationSource();
+  let remaining = toLookup;
+
+  if (source === "byok") {
+    const translations = await fetchViaByok(toLookup, sentence);
+    remaining = [];
+    for (const w of toLookup) {
+      const d = translations[w];
+      if (d && String(d.meaning || "").trim()) {
+        PAGE_MEANING_CACHE.set(w, d);
+        out[w] = d;
+      } else {
+        remaining.push(w); // model skipped it → fill the gap from local
+      }
+    }
+  } else if (source === "managed") {
+    console.warn("[LearnWise] 'managed' translation is a v2 feature; using local dictionary.");
   }
 
-  const fetched = await fetchTranslationFromLocalDictionary(toLookup);
-  for (const [w, d] of Object.entries(fetched)) {
-    PAGE_MEANING_CACHE.set(w, d);
-    out[w] = d;
+  if (remaining.length) {
+    cacheAndCollect(out, await fetchTranslationFromLocalDictionary(remaining));
   }
   return out;
 }
@@ -118,6 +168,34 @@ async function markWordKnownIO(word) {
   const bank = await getWordBank();
   markKnown(bank, word, now);
   await setWordBank(bank);
+}
+
+// ---------------------------------------------------------------------
+// Select-to-review: is this selected word a known word we can demote?
+// ---------------------------------------------------------------------
+async function isReviewableWord(word) {
+  const bank = await getWordBank();
+  const entry = bank[word];
+  return !!(entry && typeof entry === "object" && Number(entry.level || 0) >= STOP_GLOSS_LEVEL);
+}
+
+// Demote a known word back into the glossing range (the user forgot it). Done
+// locally — the content script has the bank + event log — then re-render so it
+// gets glossed right away.
+async function reviewAgainIO(word) {
+  const now = Date.now();
+  const bank = await getWordBank();
+  demoteWord(bank, word, undefined, now);
+  await setWordBank(bank);
+  try {
+    await deleteEventsForWord(word);
+  } catch (err) {
+    console.warn("[LearnWise] clearing events on demote failed:", err);
+  }
+  PAGE_LOGGED.delete(word);
+  PAGE_MEANING_CACHE.delete(word);
+  showLearnWiseToast(`LearnWise: "${word}" reset — it'll be glossed again as you read.`);
+  await runLearnWisePass().catch(handlePassError);
 }
 
 // ---------------------------------------------------------------------
@@ -323,13 +401,12 @@ function debounce(fn, waitMs) {
     handlePassError(e);
   }
 
-  // 1) Ensure a word bank exists; seed known words on very first run.
+  // 1) Ensure a word bank exists. The known-words baseline now comes from the
+  //    first-run onboarding calibration (M1.5), not a hardcoded seed — so we
+  //    just create an empty bank if none exists and let onboarding fill it.
   if (!(await isWordBankExist())) {
     await createEmptyWordBank();
-    const bank = await getWordBank();
-    insertWords(bank, mostCommonWordsList(), Date.now());
-    await setWordBank(bank);
-    console.log("[LearnWise] Seeded initial known-words bank.");
+    console.log("[LearnWise] Created empty word bank (awaiting onboarding).");
   }
 
   // 2) Initial pass.
@@ -341,4 +418,10 @@ function debounce(fn, waitMs) {
   }, 250);
   window.addEventListener("scroll", schedulePass, { passive: true });
   window.addEventListener("resize", schedulePass);
+
+  // 4) Select-to-review: selecting a known word shows a "Review again" button.
+  installSelectionAction({
+    isReviewable: (w) => isReviewableWord(w),
+    onReviewAgain: (w) => reviewAgainIO(w).catch(handlePassError),
+  });
 })();

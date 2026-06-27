@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Set up LearnWise</title>
+    <style>
+      body { font-family: -apple-system, system-ui, sans-serif; max-width: 760px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.5; }
+      h1 { font-size: 22px; margin: 0 0 6px; }
+      .sub { color: #555; font-size: 14px; margin: 0 0 18px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; margin: 14px 0 20px; }
+      .grid label { display: flex; align-items: center; gap: 7px; font-size: 15px; padding: 3px 0; cursor: pointer; }
+      .bar { position: sticky; bottom: 0; background: #fff; padding: 12px 0; border-top: 1px solid #eee; display: flex; gap: 12px; align-items: center; }
+      button { font-size: 15px; padding: 9px 16px; border-radius: 8px; border: 1px solid #2b6cb0; background: #2b6cb0; color: #fff; cursor: pointer; }
+      button.secondary { background: #fff; color: #2b6cb0; }
+      #status { font-size: 13px; color: #555; }
+      #result { display: none; padding: 16px; border: 1px solid #cce; background: #f6f9ff; border-radius: 10px; margin: 14px 0; }
+      #result.show { display: block; }
+      .big { font-size: 28px; font-weight: 700; color: #2b6cb0; }
+      .note { font-size: 13px; color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>Welcome to LearnWise</h1>
+    <p class="sub">
+      Let's tune which words get glossed as you read. <b>Check the words you already know well.</b>
+      Leave the rest unchecked — no need to be exact. This stays on your device.
+    </p>
+
+    <div id="testArea">
+      <div class="grid" id="wordGrid"></div>
+      <div class="bar">
+        <button id="seeResult">See my result</button>
+        <span id="status"></span>
+      </div>
+    </div>
+
+    <div id="result">
+      <div>Estimated vocabulary: <span class="big" id="vocabCount">—</span> common words</div>
+      <p class="note" id="resultNote"></p>
+      <div class="bar" style="border:none;">
+        <button id="finish">Finish &amp; start reading</button>
+        <button id="retake" class="secondary">Retake test</button>
+      </div>
+    </div>
+
+    <script src="../dist/onboarding.js"></script>
+  </body>
+</html>

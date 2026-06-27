@@ -32,9 +32,30 @@ A Chrome extension (Manifest V3) that helps people learn English vocabulary whil
   - Content script now logs one exposure event per word per page-visit and derives familiarity from the log; click-to-known logs a `clicked_known` event.
   - Tests: `tests/events.test.js`, `tests/familiarity.test.js`, `tests/pruning.test.js`. IndexedDB IO tested via **`fake-indexeddb`** (added to devDependencies + `tests/setup.js`).
 
-> **Verification note:** these were authored in an environment without npm access, so the IndexedDB IO tests have not been run yet. Run `npm install` then `npm test` locally to confirm green. (Pure logic was independently verified.)
+- **M1 task 1.4 — BYO-key smart translations — DONE (now multi-provider)**:
+  - `TRANSLATION_SOURCES` is now `local | byok | managed` (legacy `"api"` aliases to `byok`).
+  - **Providers** (`core/providers.js`): a registry of `openai`, `anthropic`, `openrouter`, and `custom` (OpenAI-compatible / local). Two request shapes — OpenAI Chat Completions and Anthropic Messages. `core/translation.js` holds the pure, provider-aware helpers (`validateApiKey(key,provider)`, `normalizeModel`, `buildProviderRequest`, `parseProviderResponse`, `classifyProviderError`); OpenAI-named wrappers kept for back-compat.
+  - **Per-provider storage** (`core/byokSettings.js`): keys/models are stored as `{providerId: …}` maps so switching providers never loses a key. Resolves the active config and migrates the legacy single OpenAI key.
+  - **CORS:** the provider call runs in the **background worker** (`background.js` handles `MSG.TRANSLATE_BYOK`); `dom/llm.js` is the provider-agnostic fetch (`dom/openai.js` is now a back-compat shim). `manifest.json` host_permissions: `api.openai.com`, `api.anthropic.com`, `openrouter.ai`; `custom`/local uses **`optional_host_permissions`** requested at runtime (Settings → "Grant access"). Version → 1.0.3.
+  - Content script routes by source and **falls back to the local dictionary** on any byok error/offline (one toast/page); the key is read only in the background, never on the page.
+  - **Settings/popup sync:** both now listen to `chrome.storage.onChanged`, so changing the source/provider in one window updates the other live (without clobbering a field you're editing).
+  - **`settingsWindow.js` and `popup.js` are plain classic scripts** (no ES imports, NOT bundled) loaded directly from `JSs/` — so the settings UI works without `npm run build`. They inline small mirrors of `core/providers.js` / `core/byokSettings.js` (keep in sync). The settings page shows: source, provider dropdown, per-provider model (preset dropdown or free-text for custom), key field, custom base-URL + Grant-access button, Save / "Save & test". (Earlier these were briefly bundled to `dist/settingsWindow.js`, which broke the page when `dist/` was stale — reverted.)
+  - Tests: `tests/translation_byok.test.js`, `tests/providers.test.js`, `tests/byokSettings.test.js`. Verified independently with Node (37 provider assertions).
 
-## Next action: **M1 task 1.4 — BYO-key translations** (see ESTIMATES.md → M1)
-Then **1.5 — onboarding**. Decisions for 1.4: default OpenAI model = **user-selectable dropdown** (default `gpt-4o-mini`); reconcile `TRANSLATION_SOURCES` from `["local","api"]` to the DESIGN naming `local | byok | managed`.
+> **Verification + build note:** authored without npm access, so vitest/esbuild have not run here. Before loading the extension you **must** run `npm install && npm run build` (the build now also emits `dist/settingsWindow.js`, and `dist/` must be regenerated). Then `npm test` to confirm green. All M1 pure logic was independently verified with Node.
 
-> Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's build M1 task 1.4."
+- **M1 task 1.5 — real onboarding — DONE (M1 COMPLETE)**:
+  - First-run **vocabulary calibration test** (Vocabulary-Size-Test style): samples words across frequency bands, asks which the user knows, estimates vocabulary = Σ(known fraction per band × band size), then seeds every word up to that rank as known (so they aren't glossed). Replaces the hardcoded `commonWords.js` seed (content script now just creates an empty bank).
+  - `core/onboarding.js` — pure, seeded, tested logic (`buildCalibrationTest`, `estimateVocabulary`, `buildKnownSeed`, `bandBounds`, `makeRng`). `tests/onboarding.test.js`.
+  - **Data:** `JSs/data/frequencyWords.js` — **1,797 clean, frequency-ordered words** from google-10000-english (Google Trillion-Word/COCA corpus, public domain), filtered to drop single letters, abbreviations, brand/place/proper names, and adult/spam tokens.
+  - **Page:** `HTMLs/onboarding.html` + `JSs/onboarding.js` (**bundled** → `dist/onboarding.js`, since it imports the calibration logic + word list). Opened automatically by the background worker on install (`onInstalled` reason `install`) if not yet onboarded; also re-openable via Settings → "Redo vocabulary setup". Re-takes only ADD known words (insertWords never overwrites).
+  - Verified independently with Node (17 onboarding assertions).
+
+- **Post-M1 UI tweaks:** (1) Settings hides the provider/model/key/base-URL/buttons unless source = "smart (byok)". (2) **"Review again"** per-word button in the Settings word bank: demotes a "known" word back into the glossing range (`demoteWord` in core/wordbank.js sets level → `DEMOTE_LEVEL` 20 / status "learning") and clears that word's events via the background `MSG.DEMOTE_WORD` handler (so the `clicked_known` pin doesn't re-apply). Click-to-know still pins permanently; this is the manual undo. Tests in `tests/demote.test.js`.
+
+## Next action: **M2 — Engagement** (review/SRS + audio + decks + import/export + editing; see ESTIMATES.md → M2)
+M1 (the core learning loop) is complete. M2 starts with **2.1 SRS scheduler (Leitner, test-first)** then **2.2 review queue + quiz UI**. The `srs` fields are already reserved on every Word record.
+
+> Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's build M2 task 2.1."
+
+> **Build note:** `dist/` now has FOUR bundles — `contentScript.js`, `background.js`, and `onboarding.js` (settings/popup are unbundled classic scripts). Run `npm run build` after any change under `JSs/core`, `JSs/dom`, `contentScript.js`, `background.js`, or `onboarding.js`.

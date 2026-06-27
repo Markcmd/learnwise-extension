@@ -40,7 +40,7 @@
 
 **M1 subtotal: ~28–39h** (~1.5–2 weeks part-time).
 
-> **Progress:** 1.1 ✅ · 1.2 ✅ · 1.3 ✅ (event log + derived familiarity + pruning built and tested — see START_HERE.md). Remaining: 1.4 BYO-key translations, 1.5 onboarding.
+> **Progress: M1 COMPLETE** — 1.1 ✅ · 1.2 ✅ · 1.3 ✅ · 1.4 ✅ · 1.5 ✅ (event log + derived familiarity + pruning + multi-provider BYO-key translations + vocabulary-calibration onboarding — see START_HERE.md). Next: **M2**.
 
 ---
 

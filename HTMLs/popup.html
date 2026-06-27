@@ -28,8 +28,17 @@
 
       <select id="translationSource" aria-label="Translation source">
         <option value="local">local</option>
-        <option value="api" disabled>API (coming soon)</option>
+        <option value="byok">smart (BYO key)</option>
       </select>
+    </div>
+
+    <div class="hint" style="font-size: 11px; opacity: 0.75; margin: 0 0 8px;">
+      Smart mode uses your own OpenAI key — set it in Settings.
+    </div>
+
+    <div id="searchBlock">
+      <input id="wordSearch" type="search" placeholder="Search your word bank…" autocomplete="off" spellcheck="false" />
+      <div id="searchResults"></div>
     </div>
 
     <button id="openSettings">Open SettingsWindow</button>

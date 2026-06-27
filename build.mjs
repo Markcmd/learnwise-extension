@@ -17,6 +17,12 @@ const watch = process.argv.includes("--watch");
 const entryPoints = {
   contentScript: "JSs/contentScript.js",
   background: "JSs/background.js",
+  // Onboarding imports the pure calibration logic + the frequency word list,
+  // so it is bundled (opened from the bundled background after install).
+  onboarding: "JSs/onboarding.js",
+  // Note: settingsWindow.js and popup.js are plain classic scripts loaded
+  // directly from JSs/ (no imports), so they don't need bundling. Keeping
+  // them out of the build means the settings UI works without `npm run build`.
 };
 
 /** @type {import("esbuild").BuildOptions} */

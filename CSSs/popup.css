@@ -64,3 +64,30 @@ max-width: 170px;
 padding: 6px 8px;
 border-radius: 8px;
 }
+
+/* --- Word-bank search --- */
+#searchBlock { margin-bottom: 12px; }
+#wordSearch {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 13px;
+}
+#searchResults { max-height: 210px; overflow-y: auto; margin-top: 6px; }
+.sr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+.sr-info { min-width: 0; }
+.sr-word { font-weight: 600; }
+.sr-meaning { opacity: 0.7; font-weight: 400; }
+.sr-lvl { font-size: 11px; opacity: 0.65; }
+.sr-empty { font-size: 12px; opacity: 0.7; padding: 6px 2px; }
+button.btn-sm { width: auto; padding: 4px 9px; font-size: 11px; flex: 0 0 auto; border-radius: 6px; }
