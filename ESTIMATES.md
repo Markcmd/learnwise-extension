@@ -40,6 +40,8 @@
 
 **M1 subtotal: ~28–39h** (~1.5–2 weeks part-time).
 
+> **Progress:** 1.1 ✅ · 1.2 ✅ · 1.3 ✅ (event log + derived familiarity + pruning built and tested — see START_HERE.md). Remaining: 1.4 BYO-key translations, 1.5 onboarding.
+
 ---
 
 ## M2 — Engagement (review, audio, decks, import/export, editing)

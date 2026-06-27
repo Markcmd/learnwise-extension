@@ -30,6 +30,13 @@ import {
   setSightings,
   getPromotionThreshold,
 } from "./core/promotion.js";
+import {
+  buildExposureEvents,
+  appendExposures,
+  getEventsForWord,
+  locationForEvent,
+} from "./core/events.js";
+import { recomputeLevels, applyDerivedLevels } from "./core/familiarity.js";
 import { scanViewport } from "./dom/scanner.js";
 import { renderRuby } from "./dom/renderer.js";
 import { fetchTranslationFromLocalDictionary } from "./dom/ecdict.js";
@@ -47,6 +54,16 @@ async function getTranslationSource() {
   const res = await getLocal([STORAGE_KEYS.TRANSLATION_SOURCE]);
   return normalizeSource(res[STORAGE_KEYS.TRANSLATION_SOURCE]);
 }
+
+// Privacy: log the full page URL only if the user opted in; domain-only otherwise.
+async function shouldLogFullUrl() {
+  const res = await getLocal([STORAGE_KEYS.LOG_FULL_URL]);
+  return res[STORAGE_KEYS.LOG_FULL_URL] === true;
+}
+
+// Words already logged this page-visit, so scrolling doesn't inflate counts:
+// we want roughly one exposure event per word per page view.
+const PAGE_LOGGED = new Set();
 
 // ---------------------------------------------------------------------
 // Translation: cache → local dictionary. (BYO-key 'api' arrives in M1.)
@@ -83,8 +100,23 @@ async function fetchTranslations(words, _sentence) {
 // Click-to-know IO
 // ---------------------------------------------------------------------
 async function markWordKnownIO(word) {
+  const now = Date.now();
+  // Log the assertion as a fact (clicked_known pins derived familiarity to max),
+  // then update the cached bank record.
+  try {
+    const { domain, url } = locationForEvent(
+      { domain: location.hostname, url: location.href },
+      await shouldLogFullUrl()
+    );
+    await appendExposures(
+      buildExposureEvents([word], { domain, url, action: "clicked_known" }, now),
+      now
+    );
+  } catch (err) {
+    console.warn("[LearnWise] clicked_known logging failed:", err);
+  }
   const bank = await getWordBank();
-  markKnown(bank, word, Date.now());
+  markKnown(bank, word, now);
   await setWordBank(bank);
 }
 
@@ -148,6 +180,40 @@ async function runLearnWisePass() {
       insertWords(bank, toInsert, now);
     }
     mergeTranslationsIntoBank(bank, fetched, now);
+
+    // 6b) Log exposure events (the source of truth) for words shown this
+    //     page-visit, then DERIVE familiarity from the full event history.
+    //     Logging once per word per page keeps scroll passes from inflating
+    //     counts; pruning (background) keeps the log bounded.
+    const newlyShown = showArr.filter((w) => !PAGE_LOGGED.has(w));
+    if (newlyShown.length) {
+      try {
+        const { domain, url } = locationForEvent(
+          { domain: location.hostname, url: location.href },
+          await shouldLogFullUrl()
+        );
+        const events = buildExposureEvents(
+          newlyShown,
+          { domain, url, sentence, action: "glossed" },
+          now
+        );
+        await appendExposures(events, now);
+        for (const w of newlyShown) PAGE_LOGGED.add(w);
+
+        // Recompute derived levels for the words we just logged.
+        const eventsByWord = {};
+        await Promise.all(
+          newlyShown.map(async (w) => {
+            eventsByWord[w] = await getEventsForWord(w);
+          })
+        );
+        applyDerivedLevels(bank, recomputeLevels(eventsByWord, now), now);
+      } catch (err) {
+        // Event logging is best-effort; never let it break glossing.
+        console.warn("[LearnWise] exposure logging failed:", err);
+      }
+    }
+
     await setWordBank(bank);
 
     // 7) Render reusing the scanner's nodes (no second DOM walk).

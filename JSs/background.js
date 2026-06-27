@@ -8,6 +8,7 @@
 import { getLocal, setLocal } from "./core/storage.js";
 import { STORAGE_KEYS, CURRENT_SCHEMA_VERSION } from "./core/constants.js";
 import { runMigration } from "./core/migration.js";
+import { pruneEvents } from "./core/pruning.js";
 
 async function ensureDefaults() {
   const res = await getLocal([
@@ -30,15 +31,34 @@ async function ensureDefaults() {
   if (Object.keys(patch).length) await setLocal(patch);
 }
 
+// Collapse events older than the retention window into word aggregates and
+// drop them, keeping the IndexedDB log bounded. Best-effort.
+async function prune() {
+  try {
+    const res = await pruneEvents();
+    if (res.prunedCount) {
+      console.log(`[LearnWise] Pruned ${res.prunedCount} old event(s) across ${res.words} word(s).`);
+    }
+  } catch (e) {
+    console.warn("[LearnWise] Event pruning failed:", e);
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   (async () => {
     try {
       // Migrate any existing data first, then fill in missing defaults.
       await runMigration();
       await ensureDefaults();
+      await prune();
       console.log("[LearnWise] Background: defaults ensured, schema up to date.");
     } catch (e) {
       console.warn("[LearnWise] Background init failed:", e);
     }
   })();
+});
+
+// Also prune once per browser session at startup.
+chrome.runtime.onStartup?.addListener(() => {
+  prune();
 });

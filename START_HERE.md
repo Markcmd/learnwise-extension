@@ -23,15 +23,18 @@ A Chrome extension (Manifest V3) that helps people learn English vocabulary whil
 - **Tests:** pure logic (migration, familiarity, SRS, caching) is test-first; UI is manual.
 
 ## Where we left off
-Planning is **complete**. Nothing is blocking the build. The live task list (#2–#22) is the execution view; the docs are the why/how.
+- **M0 — DONE** (committed "M0 completed"): caching, key removal, `unlimitedStorage`, `schemaVersion` + migration, one-pass DOM. Core is pure + tested.
+- **M1 foundation (1.1–1.3) — DONE**: the IndexedDB event log + derived familiarity + pruning. New modules:
+  - `core/idb.js` — promise wrapper over IndexedDB (`events` + `reviews` stores, indexed by word/ts/domain).
+  - `core/events.js` — exposure-event builders (pure) + append/query IO. Privacy: **domain-only by default**, full URL opt-in (`lw_log_full_url`).
+  - `core/familiarity.js` — derive `level` (0–100) from exposure events with a 30-day recency half-life + saturating curve. "Store facts, derive scores."
+  - `core/pruning.js` — collapse events older than 90 days into the Word's `readCount` aggregate, then delete them. Wired into `background.js` (install + startup).
+  - Content script now logs one exposure event per word per page-visit and derives familiarity from the log; click-to-known logs a `clicked_known` event.
+  - Tests: `tests/events.test.js`, `tests/familiarity.test.js`, `tests/pruning.test.js`. IndexedDB IO tested via **`fake-indexeddb`** (added to devDependencies + `tests/setup.js`).
 
-## Next action: start **M0** (see ESTIMATES.md → M0)
-Begin with **task 0.1 — scaffolding + test tooling**:
-1. Add `package.json`; install Vitest.
-2. Set up an **esbuild bundler** so `contentScript.js` can `import` from `core/` modules (content scripts can't use ES modules directly).
-3. Create `core/`, `dom/`, `tests/` folders.
-4. Add one passing sample test.
+> **Verification note:** these were authored in an environment without npm access, so the IndexedDB IO tests have not been run yet. Run `npm install` then `npm test` locally to confirm green. (Pure logic was independently verified.)
 
-Then 0.2 storage wrapper → 0.4 schema + migration (test-first) → caching, key removal, `unlimitedStorage`, DOM-pass optimization.
+## Next action: **M1 task 1.4 — BYO-key translations** (see ESTIMATES.md → M1)
+Then **1.5 — onboarding**. Decisions for 1.4: default OpenAI model = **user-selectable dropdown** (default `gpt-4o-mini`); reconcile `TRANSLATION_SOURCES` from `["local","api"]` to the DESIGN naming `local | byok | managed`.
 
-> Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's build M0 task 0.1."
+> Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's build M1 task 1.4."

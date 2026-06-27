@@ -7,6 +7,12 @@
 // for our wrappers. Each test file gets a fresh, empty store.
 // =====================================================================
 import { beforeEach, vi } from "vitest";
+// In-memory IndexedDB so the event-log IO layer (core/idb.js, core/events.js)
+// is testable in Node. `fake-indexeddb/auto` installs `indexedDB` +
+// `IDBKeyRange` onto globalThis.
+import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
+import { closeDB } from "../JSs/core/idb.js";
 
 function createFakeChrome() {
   let store = {};
@@ -63,5 +69,9 @@ globalThis.chrome = createFakeChrome();
 beforeEach(() => {
   globalThis.chrome.__reset();
   globalThis.chrome.runtime.lastError = undefined;
+  // Fresh, empty IndexedDB per test: drop the memoized connection, then
+  // swap in a brand-new in-memory factory so no data leaks between tests.
+  closeDB();
+  globalThis.indexedDB = new IDBFactory();
   vi.restoreAllMocks();
 });
