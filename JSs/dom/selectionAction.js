@@ -1,11 +1,11 @@
 // =====================================================================
-// Selection action — floating "Review again" on a selected word
+// Selection action — floating contextual button on a selected word
 // ---------------------------------------------------------------------
-// Known words aren't glossed, so you can't click them to manage them. This
-// lets the user *select* any single word on the page; if it's a known word
-// in the bank, a small floating button appears to demote it (reset it back
-// into the glossing range). Pure DOM glue — the data work is the injected
-// callbacks (isReviewable / onReviewAgain).
+// Lets the user *select* any single word on the page and act on it. The
+// caller supplies `resolveAction(word)` which decides what (if anything) to
+// offer for that word — e.g. "Review again" for a known word, or "Save word"
+// to manually capture an untracked one (M2.4 highlight-to-save). Pure DOM
+// glue — all data work lives in the injected action's `run`.
 // =====================================================================
 
 const BTN_ID = "learnwise-review-btn";
@@ -13,19 +13,19 @@ const WORD_RE = /^[A-Za-z]+(?:'[A-Za-z]+)?$/;
 
 /**
  * @param {Object} cb
- * @param {(word:string)=>Promise<boolean>} cb.isReviewable  show the button?
- * @param {(word:string)=>void|Promise<void>} cb.onReviewAgain  demote action
+ * @param {(word:string)=>Promise<({label:string, run:(word:string)=>void}|null)>} cb.resolveAction
+ *   Resolve the action to offer for a selected word, or null to show nothing.
  */
-export function installSelectionAction({ isReviewable, onReviewAgain } = {}) {
+export function installSelectionAction({ resolveAction } = {}) {
   let btn = null;
   let currentWord = "";
+  let currentRun = null;
 
   function ensureBtn() {
     if (btn && document.documentElement.contains(btn)) return btn;
     btn = document.createElement("button");
     btn.id = BTN_ID;
     btn.type = "button";
-    btn.textContent = "Review again";
     Object.assign(btn.style, {
       position: "fixed",
       zIndex: "2147483647",
@@ -51,17 +51,18 @@ export function installSelectionAction({ isReviewable, onReviewAgain } = {}) {
       e.preventDefault();
       e.stopPropagation();
       const w = currentWord;
+      const run = currentRun;
       hide();
       // Clear the selection so the trailing mouseup re-eval finds nothing and
-      // the button doesn't pop back (the demote save is async).
+      // the button doesn't pop back (the action's save is async).
       try {
         window.getSelection()?.removeAllRanges();
       } catch (_e) {
         /* ignore */
       }
-      if (w) {
+      if (w && run) {
         try {
-          onReviewAgain?.(w);
+          run(w);
         } catch (_e) {
           /* never break the page */
         }
@@ -74,6 +75,7 @@ export function installSelectionAction({ isReviewable, onReviewAgain } = {}) {
   function hide() {
     if (btn) btn.style.display = "none";
     currentWord = "";
+    currentRun = null;
   }
 
   function positionAt(rect) {
@@ -99,16 +101,16 @@ export function installSelectionAction({ isReviewable, onReviewAgain } = {}) {
       hide();
       return;
     }
-    let ok = false;
+    let action = null;
     try {
-      ok = await isReviewable?.(word);
+      action = await resolveAction?.(word);
     } catch (_e) {
-      ok = false;
+      action = null;
     }
     // Selection may have changed while we awaited the bank lookup.
     const after = selectedWord();
     if (after.word !== word) return;
-    if (!ok) {
+    if (!action || !action.label || typeof action.run !== "function") {
       hide();
       return;
     }
@@ -119,6 +121,8 @@ export function installSelectionAction({ isReviewable, onReviewAgain } = {}) {
       return;
     }
     currentWord = word;
+    currentRun = action.run;
+    ensureBtn().textContent = action.label;
     positionAt(rect);
   }
 

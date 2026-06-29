@@ -17,7 +17,9 @@ import {
   splitWords,
   markKnown,
   demoteWord,
+  normalizeWord,
 } from "./core/wordbank.js";
+import { seedReview } from "./core/srs.js";
 import { runMigration } from "./core/migration.js";
 import {
   wordsNeedingTranslation,
@@ -171,12 +173,62 @@ async function markWordKnownIO(word) {
 }
 
 // ---------------------------------------------------------------------
-// Select-to-review: is this selected word a known word we can demote?
+// Manual capture (M2.4): save a selected, untracked word to the bank.
+// Looks up its meaning, inserts it as a "manual" record in the glossing
+// range, and seeds it into the review queue (due now) so it shows up under
+// Review immediately. Then re-renders so it gets glossed on the page too.
 // ---------------------------------------------------------------------
-async function isReviewableWord(word) {
+async function captureWordIO(word) {
+  const now = Date.now();
+  const key = normalizeWord(word);
+  if (!key) return;
+
   const bank = await getWordBank();
-  const entry = bank[word];
-  return !!(entry && typeof entry === "object" && Number(entry.level || 0) >= STOP_GLOSS_LEVEL);
+  if (bank[key]) {
+    showLearnWiseToast(`LearnWise: "${key}" is already in your word bank.`);
+    return;
+  }
+
+  let meaning = "";
+  let pronunciation = "";
+  try {
+    const fetched = await fetchTranslations([key], "");
+    const d = fetched[key];
+    if (d) {
+      meaning = d.meaning || "";
+      pronunciation = d.pronunciation || "";
+    }
+  } catch (err) {
+    console.warn("[LearnWise] capture lookup failed:", err);
+  }
+
+  insertWords(bank, { [key]: { meaning, pronunciation, level: 1, source: "manual" } }, now);
+  const entry = bank[key];
+  if (entry) entry.srs = seedReview(entry.srs, now, { dueNow: true });
+  await setWordBank(bank);
+
+  PAGE_LOGGED.delete(key);
+  PAGE_MEANING_CACHE.delete(key);
+  showLearnWiseToast(`LearnWise: saved "${key}" — added to your word bank and review queue.`);
+  await runLearnWisePass().catch(handlePassError);
+}
+
+// ---------------------------------------------------------------------
+// Select-to-act: decide what the floating button offers for a selected word.
+//   • known word        → "Review again" (demote back into glossing)
+//   • untracked word     → "Save word" (manual capture)
+//   • already learning   → nothing (it's already glossed/clickable)
+// ---------------------------------------------------------------------
+async function resolveSelectionAction(word) {
+  const bank = await getWordBank();
+  const entry = bank[normalizeWord(word)];
+  if (entry && typeof entry === "object") {
+    if (Number(entry.level || 0) >= STOP_GLOSS_LEVEL) {
+      return { label: "Review again", run: (w) => reviewAgainIO(w).catch(handlePassError) };
+    }
+    return null; // already tracked + glossed → no selection action needed
+  }
+  return { label: "Save word", run: (w) => captureWordIO(w).catch(handlePassError) };
 }
 
 // Demote a known word back into the glossing range (the user forgot it). Done
@@ -419,9 +471,9 @@ function debounce(fn, waitMs) {
   window.addEventListener("scroll", schedulePass, { passive: true });
   window.addEventListener("resize", schedulePass);
 
-  // 4) Select-to-review: selecting a known word shows a "Review again" button.
+  // 4) Select-to-act: selecting a word offers "Review again" (known) or
+  //    "Save word" (untracked → manual capture, M2.4).
   installSelectionAction({
-    isReviewable: (w) => isReviewableWord(w),
-    onReviewAgain: (w) => reviewAgainIO(w).catch(handlePassError),
+    resolveAction: (w) => resolveSelectionAction(w),
   });
 })();

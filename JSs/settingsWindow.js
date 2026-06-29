@@ -1,85 +1,44 @@
 // =====================================================================
-// LearnWise settings window — word bank viewer + BYO-key settings.
+// LearnWise settings window — word-bank dashboard + theme.
 // ---------------------------------------------------------------------
-// This is a PLAIN classic script (no ES imports), loaded directly from
+// PLAIN classic script (no ES imports), loaded directly from
 // HTMLs/settingsWindow.html. It deliberately does NOT go through the
 // esbuild bundle, so the settings UI works without `npm run build`.
 //
-// The few constants/helpers below MIRROR the source-of-truth modules
-// (core/constants.js, core/providers.js, core/byokSettings.js,
-// core/translation.js). Keep them in sync if those change. The authoritative
-// translation logic still runs in the bundled background worker.
+// D-001: the "smart translations (BYO key)" form is gated behind
+// FEATURE_BYOK. The form markup currently shows a "coming soon" card
+// instead. The authoritative translation logic still lives in the core
+// modules + background worker and is untouched — re-enabling the UI means
+// restoring the form markup and flipping this flag back to true.
 // =====================================================================
+
+// ---- feature flags ----
+const FEATURE_BYOK = false; // D-001 — smart translations hidden for now.
 
 // ---- storage keys (mirror core/constants.js STORAGE_KEYS) ----
 const KEYS = {
   WORDBANK: "wordbank",
-  TRANSLATION_SOURCE: "translation_source",
-  BYOK_PROVIDER: "lw_byok_provider",
-  BYOK_KEYS: "lw_byok_keys",
-  BYOK_MODELS: "lw_byok_models",
-  BYOK_BASE_URL: "lw_byok_base_url",
-  OPENAI_KEY: "lw_openai_key", // legacy single-key storage
-  OPENAI_MODEL: "lw_openai_model",
 };
-const MSG_TRANSLATE_BYOK = "lw_translate_byok"; // mirror core/constants.js MSG.TRANSLATE_BYOK
 const MSG_DEMOTE_WORD = "lw_demote_word"; // mirror core/constants.js MSG.DEMOTE_WORD
+const MSG_DELETE_WORD = "lw_delete_word"; // mirror core/constants.js MSG.DELETE_WORD
+const MSG_CLEAR_WORDBANK = "lw_clear_wordbank"; // mirror core/constants.js MSG.CLEAR_WORDBANK
 const STOP_GLOSS_LEVEL = 90; // mirror core/constants.js
-
-// ---- provider registry for the UI (mirrors core/providers.js) ----
-const PROVIDERS_UI = [
-  { id: "openai", label: "OpenAI", keyHint: "sk-…", needsBaseUrl: false,
-    models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"] },
-  { id: "anthropic", label: "Anthropic (Claude)", keyHint: "sk-ant-…", needsBaseUrl: false,
-    models: ["claude-3-5-haiku-latest", "claude-3-5-sonnet-latest", "claude-3-7-sonnet-latest"] },
-  { id: "openrouter", label: "OpenRouter", keyHint: "sk-or-…", needsBaseUrl: false,
-    models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-flash-1.5", "meta-llama/llama-3.1-8b-instruct"] },
-  { id: "custom", label: "Custom (OpenAI-compatible)", keyHint: "your key (optional for local)", needsBaseUrl: true,
-    models: [] },
+// Familiarity tiers — mirror of core/constants.js FAMILIARITY_TIERS (single
+// source of truth). This page is an unbundled classic script so it can't import;
+// keep these `min` values in sync with constants.js. known.min === STOP_GLOSS_LEVEL.
+const FAMILIARITY_TIERS = [
+  { key: "new", label: "New", min: 0 },
+  { key: "learning", label: "Learning", min: 25 },
+  { key: "familiar", label: "Familiar", min: 60 },
+  { key: "known", label: "Known", min: STOP_GLOSS_LEVEL },
 ];
-const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS_UI.map((p) => [p.id, p]));
-const PROVIDER_IDS = PROVIDERS_UI.map((p) => p.id);
-
-function getProviderUI(id) {
-  return PROVIDER_BY_ID[id] || PROVIDERS_UI[0];
-}
-function normalizeProvider(id) {
-  return PROVIDER_BY_ID[id] ? id : "openai";
-}
-function defaultModelFor(id) {
-  return getProviderUI(id).models[0] || "";
-}
-function normalizeSource(s) {
-  if (s === "api") return "byok"; // legacy
-  return ["local", "byok", "managed"].includes(s) ? s : "local";
-}
-function normalizeModel(model, providerId) {
-  const id = normalizeProvider(providerId);
-  if (id === "custom") return String(model || "").trim();
-  return getProviderUI(id).models.includes(model) ? model : defaultModelFor(id);
-}
-function validateApiKey(key, providerId) {
-  const k = String(key || "").trim();
-  const isCustom = normalizeProvider(providerId) === "custom";
-  if (!k) return isCustom ? { valid: true, reason: "" } : { valid: false, reason: "No API key set." };
-  if (/\s/.test(k)) return { valid: false, reason: "API key must not contain spaces." };
-  if (!isCustom && k.length < 20) return { valid: false, reason: "API key looks too short." };
-  return { valid: true, reason: "" };
-}
-function resolveCustomChatUrl(baseUrl) {
-  let base = String(baseUrl || "").trim();
-  if (!base) return "";
-  base = base.replace(/\/+$/, "");
-  if (/\/chat\/completions$/.test(base)) return base;
-  if (/\/v1$/.test(base)) return `${base}/chat/completions`;
-  return `${base}/v1/chat/completions`;
-}
-function originPatternFromUrl(url) {
-  try {
-    return `${new URL(String(url || "").trim()).origin}/*`;
-  } catch (_e) {
-    return "";
-  }
+// Tier key for a level — highest tier whose `min` the level meets (mirror of
+// core/wordbank.js deriveStatus).
+function tierForLevel(level) {
+  const n = Number(level) || 0;
+  let key = FAMILIARITY_TIERS[0].key;
+  for (const t of FAMILIARITY_TIERS) if (n >= t.min) key = t.key;
+  return key;
 }
 
 // ---- storage helpers ----
@@ -89,37 +48,6 @@ function getLocal(keys) {
 function setLocal(obj) {
   return new Promise((resolve) => chrome.storage.local.set(obj, () => resolve()));
 }
-function asObject(v) {
-  return v && typeof v === "object" && !Array.isArray(v) ? v : {};
-}
-
-async function getByokSettings() {
-  const s = await getLocal([
-    KEYS.BYOK_PROVIDER, KEYS.BYOK_KEYS, KEYS.BYOK_MODELS, KEYS.BYOK_BASE_URL,
-    KEYS.OPENAI_KEY, KEYS.OPENAI_MODEL,
-  ]);
-  const keys = { ...asObject(s[KEYS.BYOK_KEYS]) };
-  const models = { ...asObject(s[KEYS.BYOK_MODELS]) };
-  if (!keys.openai && s[KEYS.OPENAI_KEY]) keys.openai = String(s[KEYS.OPENAI_KEY]);
-  if (!models.openai && s[KEYS.OPENAI_MODEL]) models.openai = String(s[KEYS.OPENAI_MODEL]);
-  return {
-    provider: normalizeProvider(s[KEYS.BYOK_PROVIDER]),
-    keys,
-    models,
-    baseUrl: String(s[KEYS.BYOK_BASE_URL] || ""),
-  };
-}
-async function saveByokProvider({ provider, key, model, baseUrl }) {
-  const id = normalizeProvider(provider);
-  const s = await getLocal([KEYS.BYOK_KEYS, KEYS.BYOK_MODELS]);
-  const keys = { ...asObject(s[KEYS.BYOK_KEYS]) };
-  const models = { ...asObject(s[KEYS.BYOK_MODELS]) };
-  keys[id] = String(key || "").trim();
-  models[id] = normalizeModel(model, id) || defaultModelFor(id);
-  const patch = { [KEYS.BYOK_PROVIDER]: id, [KEYS.BYOK_KEYS]: keys, [KEYS.BYOK_MODELS]: models };
-  if (id === "custom") patch[KEYS.BYOK_BASE_URL] = String(baseUrl || "").trim();
-  await setLocal(patch);
-}
 
 // =====================================================================
 // DOM helpers
@@ -127,17 +55,17 @@ async function saveByokProvider({ provider, key, model, baseUrl }) {
 function $(id) {
   return document.getElementById(id);
 }
-function formatTime(ts) {
-  if (!ts) return "";
+function formatDate(ts) {
+  if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleString();
+    return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   } catch (_e) {
-    return "";
+    return "—";
   }
 }
 
 // =====================================================================
-// Word bank table
+// Word bank — read + normalize
 // =====================================================================
 function normalizeRecord(word, rec) {
   const r = rec || {};
@@ -149,7 +77,10 @@ function normalizeRecord(word, rec) {
       typeof r.level === "number" ? r.level : typeof r.familiarity === "number" ? r.familiarity : 0,
     readCount:
       typeof r.readCount === "number" ? r.readCount : typeof r.read_events === "number" ? r.read_events : 0,
-    updatedAt: r.updatedAt || r.updated_at || 0,
+    addedAt: Number(r.firstSeenAt || r.createdAt || 0) || 0,
+    updatedAt: Number(r.updatedAt || r.updated_at || 0) || 0,
+    recentContexts: Array.isArray(r.recentContexts) ? r.recentContexts : [],
+    tags: Array.isArray(r.tags) ? r.tags.slice() : [],
   };
 }
 
@@ -158,6 +89,493 @@ async function getWordBank() {
   return res?.[KEYS.WORDBANK] || {};
 }
 
+// In-memory cache of normalized records (rebuilt on refresh).
+let RECORDS = [];
+
+// =====================================================================
+// Decks by difficulty (M2.4) — automatic, no manual curation.
+// Words are grouped by how common they are (frequency rank). This is a
+// classic, unbundled script, so it inlines the band thresholds that
+// core/difficulty.js defines (keep the two in sync) and loads the rank
+// list from the bundled frequency.json asset.
+// =====================================================================
+let RANK_INDEX = new Map(); // word -> frequency rank (1 = most common)
+
+// Mirror of core/difficulty.js DIFFICULTY_BANDS thresholds.
+const DIFF_BANDS = [
+  { key: "beginner", label: "Beginner", desc: "the ~600 most common words" },
+  { key: "intermediate", label: "Intermediate", desc: "common everyday words" },
+  { key: "advanced", label: "Advanced", desc: "less common words" },
+  { key: "rare", label: "Rare / specialized", desc: "uncommon or technical words" },
+];
+const DIFF_COLOR = {
+  beginner: "#0a7d2c",
+  intermediate: "#2b6cb0",
+  advanced: "#b7791f",
+  rare: "#8a5cf6",
+};
+
+function bandForRank(rank) {
+  const r = Number(rank) || 0;
+  if (r <= 0) return "rare";
+  if (r <= 600) return "beginner";
+  if (r <= 1200) return "intermediate";
+  return "advanced";
+}
+function rankOfWord(word) {
+  return RANK_INDEX.get(String(word || "").trim().toLowerCase()) || 0;
+}
+function bandLabelForWord(word) {
+  const key = bandForRank(rankOfWord(word));
+  return (DIFF_BANDS.find((b) => b.key === key) || {}).label || "";
+}
+
+async function loadRankIndex() {
+  try {
+    const res = await fetch(chrome.runtime.getURL("data/frequency.json"));
+    if (!res.ok) return;
+    const arr = await res.json();
+    if (!Array.isArray(arr)) return;
+    const idx = new Map();
+    for (let i = 0; i < arr.length; i++) {
+      const w = String(arr[i] || "").trim().toLowerCase();
+      if (w && !idx.has(w)) idx.set(w, i + 1);
+    }
+    RANK_INDEX = idx;
+  } catch (_e) {
+    /* offline / missing asset → everything falls into "Rare" */
+  }
+}
+
+// Progress stats (cards, familiarity, streak, accuracy, activity) are rendered
+// by the bundled dashboard.js (M3.2), which reads the bank + event logs and
+// computes everything via core/stats.js. The old per-tier stat cards + level
+// chart that lived here were removed when the two pages were merged.
+
+// =====================================================================
+// Word list with detail-on-click (D-009)
+// =====================================================================
+function levelClass(level) {
+  return tierForLevel(level);
+}
+
+async function demoteWordIO(word, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "…";
+  }
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: MSG_DEMOTE_WORD, word });
+    if (!resp || !resp.ok) throw new Error(resp?.error || "demote failed");
+    await refresh();
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Review again";
+    }
+    const status = $("status");
+    if (status) status.textContent = `Could not reset "${word}": ${String(e?.message || e)} (rebuild the extension?)`;
+  }
+}
+
+// Edit a word's meaning/pronunciation directly (no events involved → no
+// background hop). Mirror of core/wordbank.js editWord.
+async function editWordIO(word, fields) {
+  const bank = await getWordBank();
+  const entry = bank[word];
+  if (!entry || typeof entry !== "object") return;
+  if (typeof fields.meaning === "string") entry.meaning = fields.meaning.trim();
+  if (typeof fields.pronunciation === "string") entry.pronunciation = fields.pronunciation.trim();
+  entry.updatedAt = Date.now();
+  await setLocal({ [KEYS.WORDBANK]: bank });
+  await refresh();
+}
+
+// Delete one word — routed through the background so its events are cleared too.
+async function deleteWordIO(word) {
+  const status = $("status");
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: MSG_DELETE_WORD, word });
+    if (!resp || !resp.ok) throw new Error(resp?.error || "delete failed");
+    await refresh();
+    if (status) status.textContent = `Deleted "${word}".`;
+  } catch (e) {
+    if (status) status.textContent = `Could not delete "${word}": ${String(e?.message || e)} (rebuild the extension?)`;
+  }
+}
+
+// Clear the entire word bank + event log (background clears IndexedDB too).
+async function clearAllIO() {
+  const total = RECORDS.length;
+  if (!window.confirm(`Delete all ${total} words and your reading history? This cannot be undone. Your setup and settings are kept.`)) return;
+  const status = $("status");
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: MSG_CLEAR_WORDBANK });
+    if (!resp || !resp.ok) throw new Error(resp?.error || "clear failed");
+    await refresh();
+    if (status) status.textContent = "Cleared all words.";
+  } catch (e) {
+    if (status) status.textContent = `Could not clear: ${String(e?.message || e)} (rebuild the extension?)`;
+  }
+}
+
+function buildDetail(r) {
+  const wrap = document.createElement("div");
+  wrap.className = "wl-detail";
+  wrap.hidden = true;
+
+  const rows = document.createElement("div");
+  rows.className = "wl-meta";
+  const add = (label, value) => {
+    if (!value) return;
+    const row = document.createElement("div");
+    row.className = "wl-meta-row";
+    const l = document.createElement("span");
+    l.className = "wl-meta-label";
+    l.textContent = label;
+    const v = document.createElement("span");
+    v.className = "wl-meta-val";
+    v.textContent = value;
+    row.appendChild(l);
+    row.appendChild(v);
+    rows.appendChild(row);
+  };
+  add("Meaning", r.meaning || "—");
+  add("Pronunciation", r.pronunciation || "");
+  add("Difficulty", bandLabelForWord(r.word));
+  add("Times read", String(r.readCount || 0));
+  add("Added", formatDate(r.addedAt));
+  add("Level", String(Math.round(r.level || 0)));
+  wrap.appendChild(rows);
+
+  if (r.recentContexts.length) {
+    const ctxTitle = document.createElement("div");
+    ctxTitle.className = "wl-ctx-title";
+    ctxTitle.textContent = "Recently seen in";
+    wrap.appendChild(ctxTitle);
+    const list = document.createElement("ul");
+    list.className = "wl-ctx-list";
+    for (const c of r.recentContexts.slice(-3)) {
+      const li = document.createElement("li");
+      li.textContent = typeof c === "string" ? c : c?.sentence || c?.text || "";
+      if (li.textContent) list.appendChild(li);
+    }
+    if (list.childElementCount) wrap.appendChild(list);
+  }
+
+  if ((r.level || 0) >= STOP_GLOSS_LEVEL) {
+    const btn = document.createElement("button");
+    btn.className = "wl-review";
+    btn.textContent = "Review again";
+    btn.title = "Forgot this word? Reset it so it gets glossed and re-checked as you read.";
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      demoteWordIO(r.word, btn);
+    });
+    wrap.appendChild(btn);
+  }
+
+  // Edit / delete (M2.6)
+  const actions = document.createElement("div");
+  actions.className = "wl-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "wl-action-btn";
+  editBtn.textContent = "Edit";
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "wl-action-btn wl-delete";
+  delBtn.textContent = "Delete";
+  delBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (window.confirm(`Delete "${r.word}" from your word bank?`)) deleteWordIO(r.word);
+  });
+
+  // Inline edit form, hidden until "Edit" is clicked.
+  const form = document.createElement("div");
+  form.className = "wl-edit";
+  form.hidden = true;
+  const mInput = document.createElement("input");
+  mInput.type = "text";
+  mInput.className = "wl-edit-input";
+  mInput.placeholder = "Meaning";
+  mInput.value = r.meaning || "";
+  const pInput = document.createElement("input");
+  pInput.type = "text";
+  pInput.className = "wl-edit-input";
+  pInput.placeholder = "Pronunciation";
+  pInput.value = r.pronunciation || "";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "wl-action-btn wl-save";
+  saveBtn.textContent = "Save";
+  saveBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    editWordIO(r.word, { meaning: mInput.value, pronunciation: pInput.value });
+  });
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "wl-action-btn";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    form.hidden = true;
+  });
+  form.appendChild(mInput);
+  form.appendChild(pInput);
+  form.appendChild(saveBtn);
+  form.appendChild(cancelBtn);
+
+  editBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    form.hidden = !form.hidden;
+  });
+
+  actions.appendChild(editBtn);
+  actions.appendChild(delBtn);
+  wrap.appendChild(actions);
+  wrap.appendChild(form);
+
+  return wrap;
+}
+
+// =====================================================================
+// Decks panel (M2.4) — automatic difficulty groups
+// =====================================================================
+function renderDecks() {
+  const list = $("deckList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (!RECORDS.length) {
+    const empty = document.createElement("div");
+    empty.className = "deck-empty";
+    empty.textContent = "Words you collect will be grouped here by difficulty automatically.";
+    list.appendChild(empty);
+    return;
+  }
+
+  const groups = { beginner: [], intermediate: [], advanced: [], rare: [] };
+  for (const r of RECORDS) groups[bandForRank(rankOfWord(r.word))].push(r);
+
+  for (const band of DIFF_BANDS) {
+    const items = groups[band.key];
+    if (!items.length) continue; // hide empty difficulty decks
+
+    const folder = document.createElement("div");
+    folder.className = "folder";
+
+    const head = document.createElement("button");
+    head.className = "folder-head";
+    head.setAttribute("aria-expanded", "false");
+    const dot = document.createElement("span");
+    dot.className = "folder-chevron";
+    dot.style.background = DIFF_COLOR[band.key] || "var(--lw-accent)";
+    const name = document.createElement("span");
+    name.className = "folder-name";
+    name.textContent = band.label;
+    const count = document.createElement("span");
+    count.className = "folder-count";
+    count.textContent = String(items.length);
+    head.appendChild(dot);
+    head.appendChild(name);
+    head.appendChild(count);
+
+    const body = document.createElement("div");
+    body.className = "folder-body";
+    body.hidden = true;
+
+    const itemsWrap = document.createElement("div");
+    itemsWrap.className = "folder-items";
+    renderFolderItems(itemsWrap, items, "az");
+    body.appendChild(itemsWrap);
+
+    head.addEventListener("click", () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      head.setAttribute("aria-expanded", String(open));
+      folder.classList.toggle("open", open);
+    });
+
+    folder.appendChild(head);
+    folder.appendChild(body);
+    list.appendChild(folder);
+  }
+}
+
+function buildWordItem(r) {
+  const item = document.createElement("div");
+  item.className = "wl-item";
+
+  const head = document.createElement("button");
+  head.className = "wl-head";
+  head.setAttribute("aria-expanded", "false");
+  const lvl = Math.round(r.level || 0);
+  head.innerHTML =
+    `<span class="wl-word"></span>` +
+    `<span class="wl-meaning"></span>` +
+    `<span class="wl-bar"><span class="wl-bar-fill bar-${levelClass(lvl)}" style="width:${Math.min(100, lvl)}%"></span></span>` +
+    `<span class="wl-lvl">${lvl}</span>`;
+  head.querySelector(".wl-word").textContent = r.word;
+  head.querySelector(".wl-meaning").textContent = r.meaning || "";
+
+  const detail = buildDetail(r);
+  head.addEventListener("click", () => {
+    const open = detail.hidden;
+    detail.hidden = !open;
+    head.setAttribute("aria-expanded", String(open));
+    item.classList.toggle("open", open);
+  });
+
+  item.appendChild(head);
+  item.appendChild(detail);
+  return item;
+}
+
+// D-012: group records into collapsible folders by level. Folders are
+// collapsed by default; pass forceOpen=true (used while searching) to
+// auto-expand any folder that has matches.
+const FOLDERS = FAMILIARITY_TIERS.map((t) => ({ key: t.key, label: t.label }));
+
+// D-013: sort modes available inside an open folder.
+const SORT_MODES = [
+  { value: "az", label: "A–Z" },
+  { value: "za", label: "Z–A" },
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "levelDesc", label: "Highest level" },
+  { value: "levelAsc", label: "Lowest level" },
+];
+
+function sortRecords(items, mode) {
+  const arr = items.slice();
+  switch (mode) {
+    case "za": return arr.sort((a, b) => b.word.localeCompare(a.word));
+    case "newest": return arr.sort((a, b) => (b.addedAt - a.addedAt) || a.word.localeCompare(b.word));
+    case "oldest": return arr.sort((a, b) => (a.addedAt - b.addedAt) || a.word.localeCompare(b.word));
+    case "levelDesc": return arr.sort((a, b) => (b.level - a.level) || a.word.localeCompare(b.word));
+    case "levelAsc": return arr.sort((a, b) => (a.level - b.level) || a.word.localeCompare(b.word));
+    case "az":
+    default: return arr.sort((a, b) => a.word.localeCompare(b.word));
+  }
+}
+
+function renderFolderItems(container, items, mode) {
+  container.innerHTML = "";
+  for (const r of sortRecords(items, mode)) container.appendChild(buildWordItem(r));
+}
+
+function renderFolders(records, forceOpen = false) {
+  const list = $("wordList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (!records.length) {
+    const empty = document.createElement("div");
+    empty.className = "wl-none";
+    empty.textContent = "No matching words.";
+    list.appendChild(empty);
+    return;
+  }
+
+  const groups = {};
+  for (const f of FOLDERS) groups[f.key] = [];
+  for (const r of records) groups[levelClass(Math.round(r.level || 0))].push(r);
+
+  for (const f of FOLDERS) {
+    const items = groups[f.key];
+    if (!items.length) continue; // hide empty folders
+
+    const folder = document.createElement("div");
+    folder.className = "folder";
+
+    const head = document.createElement("button");
+    head.className = "folder-head";
+    head.setAttribute("aria-expanded", String(forceOpen));
+    head.innerHTML =
+      `<span class="folder-chevron bar-${f.key}" aria-hidden="true"></span>` +
+      `<span class="folder-name"></span>` +
+      `<span class="folder-count"></span>`;
+    head.querySelector(".folder-name").textContent = f.label;
+    head.querySelector(".folder-count").textContent = String(items.length);
+
+    const body = document.createElement("div");
+    body.className = "folder-body";
+    body.hidden = !forceOpen;
+
+    // Sort control (D-013) + the items it reorders.
+    const sortRow = document.createElement("div");
+    sortRow.className = "folder-sort";
+    const sortLabel = document.createElement("label");
+    sortLabel.className = "folder-sort-label";
+    sortLabel.textContent = "Sort";
+    const sortSel = document.createElement("select");
+    sortSel.className = "folder-sort-select";
+    for (const m of SORT_MODES) {
+      const opt = document.createElement("option");
+      opt.value = m.value;
+      opt.textContent = m.label;
+      sortSel.appendChild(opt);
+    }
+    const sortId = `sort-${f.key}`;
+    sortSel.id = sortId;
+    sortLabel.setAttribute("for", sortId);
+    sortRow.appendChild(sortLabel);
+    sortRow.appendChild(sortSel);
+
+    const itemsWrap = document.createElement("div");
+    itemsWrap.className = "folder-items";
+    renderFolderItems(itemsWrap, items, "az");
+    sortSel.addEventListener("change", () => renderFolderItems(itemsWrap, items, sortSel.value));
+
+    body.appendChild(sortRow);
+    body.appendChild(itemsWrap);
+
+    head.addEventListener("click", () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      head.setAttribute("aria-expanded", String(open));
+      folder.classList.toggle("open", open);
+    });
+    if (forceOpen) folder.classList.add("open");
+
+    folder.appendChild(head);
+    folder.appendChild(body);
+    list.appendChild(folder);
+  }
+}
+
+function applySearch() {
+  const q = String($("wordSearch")?.value || "").trim().toLowerCase();
+  const filtered = q
+    ? RECORDS.filter((r) => r.word.includes(q) || (r.meaning || "").toLowerCase().includes(q))
+    : RECORDS;
+  renderFolders(filtered, q !== "");
+}
+
+async function refresh() {
+  const status = $("status");
+  if (status) status.textContent = "Loading word bank…";
+  const bank = await getWordBank();
+  RECORDS = Object.keys(bank)
+    .map((w) => normalizeRecord(w, bank[w]))
+    .sort((a, b) => {
+      if (b.level !== a.level) return b.level - a.level;
+      return b.updatedAt - a.updatedAt;
+    });
+
+  const empty = $("emptyState");
+  const dash = $("dashboard");
+  const isEmpty = RECORDS.length === 0;
+  if (empty) empty.hidden = !isEmpty;
+  if (dash) dash.hidden = isEmpty;
+
+  if (!isEmpty) applySearch();
+  renderDecks(); // decks can be managed even with an empty bank
+  if (status) status.textContent = isEmpty ? "" : `${RECORDS.length} words`;
+}
+
+// =====================================================================
+// Download
+// =====================================================================
 function downloadObjectAsJson(filename, obj) {
   try {
     const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json;charset=utf-8" });
@@ -176,279 +594,139 @@ function downloadObjectAsJson(filename, obj) {
 
 async function downloadWordBank() {
   const status = $("status");
-  if (status) status.textContent = "Preparing download...";
+  if (status) status.textContent = "Preparing export…";
   const bank = await getWordBank();
   const now = new Date();
   const pad2 = (n) => String(n).padStart(2, "0");
   const stamp = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}_${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
-  downloadObjectAsJson(`learnwise_wordbank_${stamp}.json`, bank);
-  if (status) status.textContent = `Downloaded ${Object.keys(bank || {}).length} words.`;
+  // Wrapped export envelope (mirror of core/exportImport.js buildExport).
+  const envelope = {
+    format: "learnwise-export",
+    exportVersion: 1,
+    exportedAt: Date.now(),
+    wordCount: Object.keys(bank || {}).length,
+    wordbank: bank || {},
+  };
+  downloadObjectAsJson(`learnwise_wordbank_${stamp}.json`, envelope);
+  if (status) status.textContent = `Exported ${envelope.wordCount} words.`;
 }
 
-async function demoteWordIO(word, btn) {
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "…";
+// =====================================================================
+// Import (M2.5) — merge a backup into the bank by updatedAt (newer wins).
+// Inlined mirror of core/exportImport.js (this is the unbundled script).
+// =====================================================================
+function extractBankFromImport(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed.wordbank !== undefined) {
+    const wb = parsed.wordbank;
+    return wb && typeof wb === "object" && !Array.isArray(wb) ? wb : null;
   }
-  try {
-    const resp = await chrome.runtime.sendMessage({ type: MSG_DEMOTE_WORD, word });
-    if (!resp || !resp.ok) throw new Error(resp?.error || "demote failed");
-    await refresh(); // re-render with the updated level/status
-  } catch (e) {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Review again";
-    }
-    const status = $("status");
-    if (status) status.textContent = `Could not reset "${word}": ${String(e?.message || e)} (rebuild the extension?)`;
-  }
+  if (parsed.format !== undefined) return null;
+  return parsed; // raw bank map (legacy export)
 }
 
-function renderRows(records) {
-  const tbody = $("wordbankRows");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  for (const r of records) {
-    const tr = document.createElement("tr");
-    const cells = [
-      r.word,
-      r.meaning,
-      r.pronunciation,
-      String(r.level ?? ""),
-      String(r.readCount ?? ""),
-      formatTime(r.updatedAt),
-    ];
-    cells.forEach((text, i) => {
-      const td = document.createElement("td");
-      td.textContent = text;
-      if (i === 3 || i === 4) td.style.textAlign = "right";
-      tr.appendChild(td);
-    });
-
-    // Actions: "Review again" demotes a known word back into the glossing range.
-    const tdAction = document.createElement("td");
-    if ((r.level ?? 0) >= STOP_GLOSS_LEVEL) {
-      const btn = document.createElement("button");
-      btn.textContent = "Review again";
-      btn.title = "Forgot this word? Reset it so it gets glossed and re-checked as you read.";
-      btn.style.fontSize = "12px";
-      btn.addEventListener("click", () => demoteWordIO(r.word, btn));
-      tdAction.appendChild(btn);
-    }
-    tr.appendChild(tdAction);
-
-    tbody.appendChild(tr);
+function mergeBank(current, incoming) {
+  const out = {};
+  const base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  for (const [k, v] of Object.entries(base)) {
+    const key = String(k || "").trim().toLowerCase();
+    if (key) out[key] = v;
   }
+  let added = 0, updated = 0, skipped = 0;
+  const inc = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? incoming : {};
+  for (const [rawKey, rec] of Object.entries(inc)) {
+    const key = String(rawKey || "").trim().toLowerCase();
+    if (!key || !rec || typeof rec !== "object" || Array.isArray(rec)) { skipped++; continue; }
+    const existing = out[key];
+    if (!existing) { out[key] = rec; added++; continue; }
+    const a = Number(existing.updatedAt) || 0;
+    const b = Number(rec.updatedAt) || 0;
+    if (b > a) { out[key] = rec; updated++; } else { skipped++; }
+  }
+  return { bank: out, stats: { added, updated, skipped } };
 }
 
-async function refresh() {
+async function importFromFile(file) {
   const status = $("status");
-  if (status) status.textContent = "Loading word bank...";
-  const bank = await getWordBank();
-  const records = Object.keys(bank)
-    .map((w) => normalizeRecord(w, bank[w]))
-    .sort((a, b) => {
-      const la = a.level ?? 0;
-      const lb = b.level ?? 0;
-      if (lb !== la) return lb - la;
-      return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
-    });
-  renderRows(records);
-  if (status) status.textContent = `Loaded ${records.length} words.`;
-}
-
-// =====================================================================
-// BYO-key translation settings (multi-provider)
-// =====================================================================
-function setByokStatus(msg, kind = "info") {
-  const el = $("byokStatus");
-  if (!el) return;
-  el.textContent = msg || "";
-  el.style.color = kind === "error" ? "#b00020" : kind === "ok" ? "#0a7d2c" : "inherit";
-}
-
-// In-memory copy of the per-provider maps so switching providers in the UI
-// shows the right saved values without re-reading storage each time.
-let BYOK_KEYS = {};
-let BYOK_MODELS = {};
-
-function populateProviderSelect() {
-  const sel = $("byokProvider");
-  if (!sel || sel.options.length) return;
-  for (const id of PROVIDER_IDS) {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = getProviderUI(id).label;
-    sel.appendChild(opt);
-  }
-}
-
-function renderProviderFields(providerId) {
-  const provider = getProviderUI(providerId);
-  const isCustom = providerId === "custom";
-  const modelSel = $("byokModel");
-  const modelCustom = $("byokModelCustom");
-  const keyInput = $("byokKey");
-
-  if (modelSel) {
-    modelSel.innerHTML = "";
-    for (const m of provider.models) {
-      const opt = document.createElement("option");
-      opt.value = m;
-      opt.textContent = m === defaultModelFor(providerId) ? `${m} (default)` : m;
-      modelSel.appendChild(opt);
-    }
-    modelSel.style.display = isCustom ? "none" : "";
-    if (!isCustom) modelSel.value = BYOK_MODELS[providerId] || defaultModelFor(providerId);
-  }
-  if (modelCustom) {
-    modelCustom.style.display = isCustom ? "" : "none";
-    if (isCustom) modelCustom.value = BYOK_MODELS[providerId] || "";
-  }
-  if (keyInput) {
-    keyInput.value = BYOK_KEYS[providerId] || "";
-    keyInput.placeholder = provider.keyHint || "your key";
-  }
-  applyByokVisibility();
-}
-
-// Show the BYO-key fields only when the source is "smart (byok)"; show the
-// custom base-URL row only for the custom provider. Keeps "local" mode clean.
-function applyByokVisibility() {
-  const byok = ($("translationSource")?.value || "local") === "byok";
-  const isCustom = ($("byokProvider")?.value || "openai") === "custom";
-
-  for (const el of document.querySelectorAll(".byokOnly")) {
-    el.style.display = byok ? "" : "none";
-  }
-  const btns = $("byokButtons");
-  if (btns) btns.style.display = byok ? "flex" : "none";
-
-  const showBase = byok && isCustom;
-  const baseRow = $("byokBaseUrlRow");
-  const baseLabel = $("byokBaseUrlLabel");
-  if (baseRow) baseRow.style.display = showBase ? "" : "none";
-  if (baseLabel) baseLabel.style.display = showBase ? "" : "none";
-}
-
-async function loadByokSettings() {
-  populateProviderSelect();
-  const sourceSel = $("translationSource");
-  const providerSel = $("byokProvider");
-  const baseUrlInput = $("byokBaseUrl");
-  if (!sourceSel || !providerSel) return;
-
-  const res = await getLocal([KEYS.TRANSLATION_SOURCE]);
-  sourceSel.value = normalizeSource(res[KEYS.TRANSLATION_SOURCE]);
-
-  const settings = await getByokSettings();
-  BYOK_KEYS = settings.keys || {};
-  BYOK_MODELS = settings.models || {};
-  providerSel.value = settings.provider;
-  if (baseUrlInput) baseUrlInput.value = settings.baseUrl || "";
-  renderProviderFields(settings.provider);
-}
-
-function readModelFromUI(providerId) {
-  return providerId === "custom"
-    ? String($("byokModelCustom")?.value || "").trim()
-    : String($("byokModel")?.value || "");
-}
-
-async function saveByokSettings() {
-  const source = normalizeSource($("translationSource")?.value);
-  const provider = $("byokProvider")?.value || "openai";
-  const key = String($("byokKey")?.value || "").trim();
-  const model = readModelFromUI(provider);
-  const baseUrl = String($("byokBaseUrl")?.value || "").trim();
-
-  if (source === "byok") {
-    const fmt = validateApiKey(key, provider);
-    if (!fmt.valid) {
-      setByokStatus(fmt.reason, "error");
-      return false;
-    }
-    if (provider === "custom" && !resolveCustomChatUrl(baseUrl)) {
-      setByokStatus("Enter the base URL of your OpenAI-compatible endpoint.", "error");
-      return false;
-    }
-  }
-
-  await setLocal({ [KEYS.TRANSLATION_SOURCE]: source });
-  await saveByokProvider({ provider, key, model, baseUrl });
-  BYOK_KEYS[provider] = key;
-  BYOK_MODELS[provider] = normalizeModel(model, provider) || defaultModelFor(provider);
-  setByokStatus("Saved.", "ok");
-  return true;
-}
-
-async function testByokSettings() {
-  if (!(await saveByokSettings())) return;
-  setByokStatus("Testing…");
+  if (!file) return;
+  if (status) status.textContent = `Reading ${file.name}…`;
   try {
-    const resp = await chrome.runtime.sendMessage({
-      type: MSG_TRANSLATE_BYOK,
-      words: ["hello"],
-      sentence: "Hello there.",
-    });
-    if (resp && resp.ok) {
-      const meaning = resp.translations?.hello?.meaning;
-      setByokStatus(meaning ? `Working — "hello" → ${meaning}` : "Key works.", "ok");
-    } else {
-      setByokStatus(resp?.error?.message || "Test failed (is the extension rebuilt?).", "error");
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const incoming = extractBankFromImport(parsed);
+    if (!incoming) throw new Error("Not a recognized LearnWise backup.");
+
+    const current = await getWordBank();
+    const { bank, stats } = mergeBank(current, incoming);
+    await setLocal({ [KEYS.WORDBANK]: bank });
+    await refresh();
+    if (status) {
+      status.textContent = `Imported: +${stats.added} new, ${stats.updated} updated, ${stats.skipped} skipped.`;
     }
   } catch (e) {
-    setByokStatus(`Test failed: ${String(e?.message || e)}`, "error");
-  }
-}
-
-async function grantCustomHost() {
-  const origin = originPatternFromUrl($("byokBaseUrl")?.value || "");
-  if (!origin) {
-    setByokStatus("Enter a valid base URL first.", "error");
-    return;
-  }
-  try {
-    const granted = await chrome.permissions.request({ origins: [origin] });
-    setByokStatus(granted ? `Access granted for ${origin}` : "Access was not granted.", granted ? "ok" : "error");
-  } catch (e) {
-    setByokStatus(`Could not request access: ${String(e?.message || e)}`, "error");
-  }
-}
-
-// Reflect a source change made elsewhere (e.g. the popup) live.
-function applyExternalChanges(changes, area) {
-  if (area !== "local") return;
-  const sourceSel = $("translationSource");
-  if (changes[KEYS.TRANSLATION_SOURCE] && sourceSel && document.activeElement !== sourceSel) {
-    sourceSel.value = normalizeSource(changes[KEYS.TRANSLATION_SOURCE].newValue);
-    applyByokVisibility();
+    if (status) status.textContent = `Import failed: ${String(e?.message || e)}`;
   }
 }
 
 // =====================================================================
-// App entry — run now if the DOM is already parsed, else on DOMContentLoaded.
+// Color theme (light / dark)
+// =====================================================================
+const THEME_KEY = "lw_theme";
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === "light" || theme === "dark") {
+    root.setAttribute("data-theme", theme);
+  } else {
+    root.removeAttribute("data-theme");
+  }
+  $("themeLight")?.classList.toggle("active", theme === "light");
+  $("themeDark")?.classList.toggle("active", theme === "dark");
+}
+
+async function loadTheme() {
+  const res = await getLocal([THEME_KEY]);
+  const t = res[THEME_KEY];
+  applyTheme(t === "light" || t === "dark" ? t : "");
+}
+
+async function setTheme(theme) {
+  await setLocal({ [THEME_KEY]: theme });
+  applyTheme(theme);
+}
+
+// =====================================================================
+// App entry
 // =====================================================================
 function init() {
+  loadTheme();
+  $("themeLight")?.addEventListener("click", () => setTheme("light"));
+  $("themeDark")?.addEventListener("click", () => setTheme("dark"));
   $("btnRefresh")?.addEventListener("click", refresh);
   $("btnDownload")?.addEventListener("click", downloadWordBank);
+  $("btnImport")?.addEventListener("click", () => $("importFile")?.click());
+  $("importFile")?.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    importFromFile(file);
+    e.target.value = ""; // allow re-importing the same file
+  });
   $("btnOnboarding")?.addEventListener("click", () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("HTMLs/onboarding.html") });
   });
-  $("btnSaveKey")?.addEventListener("click", saveByokSettings);
-  $("btnTestKey")?.addEventListener("click", testByokSettings);
-  $("btnGrantHost")?.addEventListener("click", grantCustomHost);
-  $("byokProvider")?.addEventListener("change", (e) => renderProviderFields(e.target.value));
-  $("translationSource")?.addEventListener("change", applyByokVisibility);
+  $("btnClearAll")?.addEventListener("click", clearAllIO);
+  $("wordSearch")?.addEventListener("input", applySearch);
 
+  // Keep the dashboard fresh if words change while the page is open.
   try {
-    chrome.storage.onChanged.addListener(applyExternalChanges);
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes[KEYS.WORDBANK]) refresh();
+    });
   } catch (_e) {
     /* no-op */
   }
 
-  loadByokSettings();
-  refresh();
+  // Load the frequency rank list (for difficulty decks) before first render.
+  loadRankIndex().then(refresh, refresh);
 }
 
 if (document.readyState === "loading") {

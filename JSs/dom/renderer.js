@@ -5,6 +5,8 @@
 // walk) and wraps matching words with <ruby> + <rt> glosses.
 // =====================================================================
 
+import { speak } from "./speech.js";
+
 const WORD_RE = /[A-Za-z]+(?:'[A-Za-z]+)?/g;
 let CLICK_HANDLER_INSTALLED = false;
 
@@ -27,8 +29,10 @@ export function ensureRubyStyle() {
 }
 
 /**
- * Install a single delegated click handler: clicking a glossed word marks it
- * known and removes the annotation. `onMarkKnown(word)` does the data update.
+ * Install a single delegated click handler on glossed words:
+ *  - plain click       → mark the word known and remove the annotation
+ *  - Alt/Option+click  → pronounce the word (Web Speech API), keep the gloss
+ * `onMarkKnown(word)` does the data update.
  */
 export function installRubyClickHandlerOnce(onMarkKnown) {
   if (CLICK_HANDLER_INSTALLED) return;
@@ -42,6 +46,18 @@ export function installRubyClickHandlerOnce(onMarkKnown) {
 
       const w = String(ruby.dataset?.lwWord || "").trim().toLowerCase();
       if (!w) return;
+
+      // Alt/Option+click pronounces the word without marking it known.
+      if (e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          speak(w);
+        } catch (_e) {
+          /* swallow — audio must not break the page */
+        }
+        return;
+      }
 
       try {
         onMarkKnown?.(w);
@@ -112,6 +128,7 @@ export function renderRuby(nodes, showDict, onMarkKnown) {
         const ruby = document.createElement("ruby");
         ruby.className = "learnwise-ruby";
         ruby.dataset.lwWord = key;
+        ruby.title = "Click: I know this · Alt+click: hear it";
         ruby.appendChild(document.createTextNode(wText));
 
         const rt = document.createElement("rt");

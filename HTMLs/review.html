@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review — LearnWise</title>
+    <link rel="stylesheet" href="../CSSs/review.css" />
+  </head>
+  <body>
+    <header class="lw-rv-header">
+      <img class="lw-rv-logo" src="../icons/LEARNWISE_48.png" alt="" />
+      <div class="lw-rv-titles">
+        <div class="lw-rv-title">Review</div>
+        <div class="lw-rv-sub">Recall what you've been learning</div>
+      </div>
+      <div class="lw-rv-progress" id="progress"></div>
+    </header>
+
+    <main class="lw-rv-main">
+      <!-- Loading -->
+      <section id="loading" class="lw-rv-panel">Loading your review queue…</section>
+
+      <!-- Empty state -->
+      <section id="empty" class="lw-rv-panel" hidden>
+        <div class="lw-rv-empty-emoji">🎉</div>
+        <h2>Nothing due right now</h2>
+        <p class="lw-rv-muted" id="emptyNote">
+          You're all caught up. Keep reading the web and check back later — words
+          you're learning will show up here when they're due.
+        </p>
+        <button class="lw-rv-btn" id="closeEmpty">Close</button>
+      </section>
+
+      <!-- Flashcard -->
+      <section id="card" class="lw-rv-panel" hidden>
+        <div class="lw-rv-card">
+          <div class="lw-rv-word-row">
+            <div class="lw-rv-word" id="cardWord">—</div>
+            <button class="lw-rv-speak" id="speakBtn" type="button" aria-label="Play pronunciation" title="Play pronunciation" hidden>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lw-rv-back" id="cardBack" hidden>
+            <div class="lw-rv-pron" id="cardPron"></div>
+            <div class="lw-rv-meaning" id="cardMeaning"></div>
+            <div class="lw-rv-context" id="cardContext"></div>
+          </div>
+        </div>
+
+        <div class="lw-rv-actions">
+          <button class="lw-rv-btn lw-rv-show" id="showBtn">Show answer</button>
+
+          <div class="lw-rv-grades" id="grades" hidden>
+            <button class="lw-rv-grade lw-rv-again" data-grade="again">
+              Again<small id="hintAgain"></small>
+            </button>
+            <button class="lw-rv-grade lw-rv-hard" data-grade="hard">
+              Hard<small id="hintHard"></small>
+            </button>
+            <button class="lw-rv-grade lw-rv-good" data-grade="good">
+              Good<small id="hintGood"></small>
+            </button>
+            <button class="lw-rv-grade lw-rv-easy" data-grade="easy">
+              Easy<small id="hintEasy"></small>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Session summary -->
+      <section id="done" class="lw-rv-panel" hidden>
+        <div class="lw-rv-empty-emoji">✅</div>
+        <h2>Session complete</h2>
+        <p class="lw-rv-muted" id="doneNote"></p>
+        <div class="lw-rv-bar-row">
+          <button class="lw-rv-btn" id="reviewMore" hidden>Review more</button>
+          <button class="lw-rv-btn lw-rv-secondary" id="closeDone">Close</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="lw-rv-foot">
+      <span class="lw-rv-muted" id="kbdHint">Tip: Space = show · 1 Again · 2 Hard · 3 Good · 4 Easy</span>
+    </footer>
+
+    <script src="../dist/review.js"></script>
+  </body>
+</html>

@@ -7,41 +7,33 @@
     <!-- defer means to load the script after the HTML is parsed -->
     <script src="../JSs/popup.js" defer></script>
     <link rel="stylesheet" href="../CSSs/popup.css" />
-
   </head>
   <body>
-    <div class="row">
+    <header class="lw-header">
+      <img class="lw-logo" src="../icons/LEARNWISE_48.png" alt="" />
       <div>
-        <div><b>Enable extension</b></div>
+        <div class="lw-title">LearnWise</div>
+        <div class="lw-subtitle">Learn vocabulary as you read</div>
       </div>
+    </header>
 
-      <label class="switch" aria-label="Enable extension">
-        <input id="enableToggle" type="checkbox" />
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="row">
-      <div>
-        <div class="hint"><b>Translation source</b></div>
+    <div class="card">
+      <div class="row">
+        <span class="row-label">Enable extension</span>
+        <label class="switch" aria-label="Enable extension">
+          <input id="enableToggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
       </div>
-
-      <select id="translationSource" aria-label="Translation source">
-        <option value="local">local</option>
-        <option value="byok">smart (BYO key)</option>
-      </select>
     </div>
 
-    <div class="hint" style="font-size: 11px; opacity: 0.75; margin: 0 0 8px;">
-      Smart mode uses your own OpenAI key — set it in Settings.
+    <div class="stat-line" id="statLine">
+      <span class="stat-pair"><b id="statTotal">0</b> words</span>
+      <span class="stat-dot">·</span>
+      <span class="stat-pair"><b id="statKnown">0</b> known</span>
+      <span class="stat-week" id="statWeek"></span>
     </div>
 
-    <div id="searchBlock">
-      <input id="wordSearch" type="search" placeholder="Search your word bank…" autocomplete="off" spellcheck="false" />
-      <div id="searchResults"></div>
-    </div>
-
-    <button id="openSettings">Open SettingsWindow</button>
-    
+    <button id="openDashboard">Open LearnWise</button>
   </body>
 </html>

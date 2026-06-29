@@ -48,14 +48,16 @@
 
 | # | Task | Subtasks | Est. |
 |---|------|----------|------|
-| 2.1 | **SRS scheduler (Leitner)** (#10) | `core/srs.js` boxes + intervals; `nextReviewAt`; tests (*test-first — pure math*) | 4–6h |
-| 2.2 | **Review queue + quiz UI** (#10) | Query due words; flashcard front/back; grade buttons; wire results → events + srs | 9–12h |
-| 2.3 | **Pronunciation audio** (#10) | Web Speech API on glossed words + review cards; speaker UI | 3–5h |
-| 2.4 | **Decks + manual capture** (#20) | Deck CRUD (storage + UI); highlight-to-save; assign words to decks | 9–12h |
-| 2.5 | **Export / import** (#19) | Serialize bank+decks; import merge-by-`updatedAt`; tests | 4–6h |
-| 2.6 | **Editable word bank** (#9) | Per-word edit/delete + clear-all in settings | 4–6h |
+| 2.1 | **SRS scheduler (Leitner)** ✅ (#10) | `core/srs.js` boxes + intervals; `nextReviewAt`; tests (*test-first — pure math*) | 4–6h |
+| 2.2 | **Review queue + quiz UI** ✅ (#10) | Query due words; flashcard front/back; grade buttons; wire results → events + srs | 9–12h |
+| 2.3 | **Pronunciation audio** ✅ (#10) | Web Speech API on glossed words + review cards; speaker UI | 3–5h |
+| 2.4 | **Decks + manual capture** ✅ (#20) | Deck CRUD (storage + UI); highlight-to-save; assign words to decks | 9–12h |
+| 2.5 | **Export / import** ✅ (#19) | Serialize bank+decks; import merge-by-`updatedAt`; tests | 4–6h |
+| 2.6 | **Editable word bank** ✅ (#9) | Per-word edit/delete + clear-all in settings | 4–6h |
 
 **M2 subtotal: ~33–47h** (~2–3 weeks part-time).
+
+> **Progress: M2 COMPLETE** — 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 ✅ (SRS scheduler + review queue/quiz UI + pronunciation audio + automatic difficulty decks & manual capture + export/import + editable word bank — see START_HERE.md). Next: **M3**.
 
 ---
 
@@ -63,10 +65,16 @@
 
 | # | Task | Subtasks | Est. |
 |---|------|----------|------|
-| 3.1 | **Stats aggregation** | Compute words-learned, level distribution, streaks from bank+events; tests | 3–4h |
-| 3.2 | **Charts + layout** | Render charts (a small lib or canvas); dashboard page | 7–10h |
+| 3.1 | **Stats aggregation** ✅ | Compute words-learned, level distribution, streaks from bank+events; tests | 3–4h |
+| 3.2 | **Charts + layout** ✅ | Render charts (a small lib or canvas); dashboard page | 7–10h |
 
 **M3 subtotal: ~10–14h** (~1 week part-time).
+
+> **Progress: M3 COMPLETE** — 3.1 ✅ (`core/stats.js` pure stats aggregation;
+> `tests/stats.test.js`, 58 assertions Node-verified) · 3.2 ✅ (dedicated
+> dashboard page `HTMLs/dashboard.html` + bundled `dist/dashboard.js` + CSS:
+> headline cards, familiarity bars, streak, review-accuracy donut, 30-day
+> activity sparkline; hand-rolled SVG, zero deps — see START_HERE.md). Next: **M4 — launch**.
 
 ---
 

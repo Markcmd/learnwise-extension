@@ -6,19 +6,26 @@
 // Keeping the logic pure is what makes it unit-testable.
 // =====================================================================
 import { getLocal, setLocal } from "./storage.js";
-import { STORAGE_KEYS, STOP_GLOSS_LEVEL, MAX_RECENT_CONTEXTS, DEMOTE_LEVEL } from "./constants.js";
+import { STORAGE_KEYS, STOP_GLOSS_LEVEL, MAX_RECENT_CONTEXTS, DEMOTE_LEVEL, FAMILIARITY_TIERS } from "./constants.js";
 
 /** Normalize a raw token into a word-bank key. */
 export function normalizeWord(raw) {
   return String(raw ?? "").trim().toLowerCase();
 }
 
-/** Derive a coarse status label from a familiarity level. */
+/**
+ * Derive a coarse status label from a familiarity level using the canonical
+ * FAMILIARITY_TIERS rule (single source of truth in constants.js). Returns the
+ * highest tier whose `min` the level meets: new | learning | familiar | known.
+ * NOTE: "ignored" is a separate, user-set status and is never derived here.
+ */
 export function deriveStatus(level) {
   const n = Number(level) || 0;
-  if (n >= STOP_GLOSS_LEVEL) return "known";
-  if (n > 0) return "learning";
-  return "new";
+  let key = FAMILIARITY_TIERS[0].key;
+  for (const tier of FAMILIARITY_TIERS) {
+    if (n >= tier.min) key = tier.key;
+  }
+  return key;
 }
 
 /** Default SRS sub-object (reserved now, used by the review feature in M2). */
@@ -168,6 +175,40 @@ export function demoteWord(bank, word, level = DEMOTE_LEVEL, now = Date.now()) {
   entry.level = lvl;
   entry.status = deriveStatus(lvl);
   entry.updatedAt = now;
+  return bank;
+}
+
+/**
+ * Edit a tracked word's user-facing fields (pure). Only `meaning` and
+ * `pronunciation` are editable; strings are written as-is (trimmed), and
+ * `updatedAt` is bumped so export/import + sync treat the edit as newest.
+ * No-op for untracked words. Mutates and returns `bank`.
+ */
+export function editWord(bank, word, fields = {}, now = Date.now()) {
+  const key = normalizeWord(word);
+  const entry = bank ? bank[key] : null;
+  if (!entry || typeof entry !== "object") return bank;
+  let changed = false;
+  if (typeof fields.meaning === "string") {
+    entry.meaning = fields.meaning.trim();
+    changed = true;
+  }
+  if (typeof fields.pronunciation === "string") {
+    entry.pronunciation = fields.pronunciation.trim();
+    changed = true;
+  }
+  if (changed) entry.updatedAt = now;
+  return bank;
+}
+
+/**
+ * Remove a word from the bank (pure). Caller is responsible for clearing the
+ * word's events (done in the background via MSG.DELETE_WORD) so derived
+ * familiarity doesn't resurrect it on the next pass. Mutates and returns `bank`.
+ */
+export function deleteWord(bank, word) {
+  const key = normalizeWord(word);
+  if (bank && key && bank[key]) delete bank[key];
   return bank;
 }
 

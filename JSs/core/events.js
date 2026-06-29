@@ -8,7 +8,7 @@
 // logic pure is what makes it unit-testable.
 // =====================================================================
 import { normalizeWord } from "./wordbank.js";
-import { IDB, EXPOSURE_ACTIONS, MAX_SENTENCE_LEN } from "./constants.js";
+import { IDB, EXPOSURE_ACTIONS, MAX_SENTENCE_LEN, GRADES, GRADE_QUALITY } from "./constants.js";
 import { addAll, getAll, getAllByIndex, count, deleteKeys } from "./idb.js";
 
 // ---------------------------------------------------------------------
@@ -90,6 +90,33 @@ export function buildExposureEvents(words, ctx = {}, now = Date.now()) {
   return out;
 }
 
+/**
+ * Build a normalized, validated review event (pure) — the record of one
+ * graded review (DESIGN.md REVIEW_EVENT). Returns null for unusable input
+ * (no word / bad grade). The grade is mapped to an SM-2 quality (0–5) and we
+ * also persist the resulting interval/box so review history is self-describing.
+ * @param {Object} input { word, grade, intervalAfter?, box?, ts? }
+ * @param {number} [now]
+ */
+export function makeReviewEvent(input = {}, now = Date.now()) {
+  const word = normalizeWord(input.word);
+  if (!word) return null;
+  if (!GRADES.includes(input.grade)) return null;
+
+  const ts = Number.isFinite(input.ts) ? input.ts : now;
+  const intervalAfter = Number.isFinite(input.intervalAfter) ? input.intervalAfter : 0;
+  const box = Number.isFinite(input.box) ? input.box : 0;
+
+  return {
+    word,
+    ts,
+    grade: input.grade,
+    quality: GRADE_QUALITY[input.grade],
+    intervalAfter,
+    box,
+  };
+}
+
 /** Group a flat list of events by their word (pure). */
 export function groupEventsByWord(events) {
   const out = {};
@@ -142,6 +169,11 @@ export async function getAllEventsByWord() {
   return groupEventsByWord(rows);
 }
 
+/** Every exposure event as a flat list — used by the progress dashboard (M3.2). */
+export async function getAllExposures() {
+  return getAll(IDB.STORES.EVENTS);
+}
+
 /** Exposure events at or after a timestamp (uses the ts index). */
 export async function getEventsSince(sinceTs) {
   const lower = Number.isFinite(sinceTs) ? sinceTs : 0;
@@ -173,4 +205,48 @@ export async function deleteEventsForWord(word) {
   const ids = rows.map((r) => r.id).filter((id) => id != null);
   if (ids.length) await deleteKeys(IDB.STORES.EVENTS, ids);
   return ids.length;
+}
+
+// ---------------------------------------------------------------------
+// Review events (IndexedDB "reviews" store) — written by the M2 review UI
+// ---------------------------------------------------------------------
+
+/**
+ * Append review events to the log. Accepts built events or raw inputs (which
+ * are normalized via makeReviewEvent). Returns the count actually written.
+ */
+export async function appendReviews(events, now = Date.now()) {
+  const normalized = [];
+  for (const e of events || []) {
+    const ev = e && Number.isFinite(e.ts) && GRADES.includes(e.grade) && e.word
+      ? e // already a built event
+      : makeReviewEvent(e, now);
+    if (ev) normalized.push(ev);
+  }
+  if (!normalized.length) return 0;
+  await addAll(IDB.STORES.REVIEWS, normalized);
+  return normalized.length;
+}
+
+/** Append a single review event; resolves to the count written (0 or 1). */
+export async function appendReview(input, now = Date.now()) {
+  return appendReviews([input], now);
+}
+
+/** All review events for one word, oldest-first. */
+export async function getReviewsForWord(word) {
+  const key = normalizeWord(word);
+  if (!key) return [];
+  const rows = await getAllByIndex(IDB.STORES.REVIEWS, "word", key);
+  return rows.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+}
+
+/** Every review event as a flat list — used by the progress dashboard (M3.2). */
+export async function getAllReviews() {
+  return getAll(IDB.STORES.REVIEWS);
+}
+
+/** Total number of stored review events. */
+export async function countReviews() {
+  return count(IDB.STORES.REVIEWS);
 }

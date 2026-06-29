@@ -60,7 +60,7 @@ describe("migrateWordRecord", () => {
     expect(r.createdAt).toBe(1000);
     expect(r.firstSeenAt).toBe(1000); // derived from createdAt
     expect(r.lastSeenAt).toBe(2000); // derived from updatedAt
-    expect(r.status).toBe("learning");
+    expect(r.status).toBe("new"); // level 12 → "new" under the 4-tier rule
   });
 
   it("handles legacy alias fields", () => {

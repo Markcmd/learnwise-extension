@@ -27,6 +27,8 @@ export const STORAGE_KEYS = {
   ONBOARDED: "lw_onboarded",
   /** Onboarding: the estimated known-vocabulary size (frequency rank threshold). */
   ESTIMATED_VOCAB: "lw_estimated_vocab",
+  /** Audio (M2.3): auto-play pronunciation when a review answer is revealed. */
+  SPEECH_AUTOPLAY: "lw_speech_autoplay",
 };
 
 /** Current data schema version. Bump + add a migration step when the shape changes. */
@@ -34,6 +36,31 @@ export const CURRENT_SCHEMA_VERSION = 1;
 
 /** Familiarity at/above which we stop glossing a word. */
 export const STOP_GLOSS_LEVEL = 90;
+
+/**
+ * Familiarity TIERS — the SINGLE source of truth for mapping a 0–100 `level`
+ * to a coarse label (used by deriveStatus, the settings folders, the progress
+ * chart). Ordered low→high; `min` is the inclusive lower bound. A level belongs
+ * to the HIGHEST tier whose `min` it meets. The top tier's `min` is exactly
+ * STOP_GLOSS_LEVEL, so "known" and "stop glossing" can never drift apart.
+ *
+ * Tuning (why these numbers): `level` is derived from the saturating exposure
+ * curve in core/familiarity.js (SATURATION 0.18, 30-day half-life), where
+ * ~1 weighted exposure ≈ 16, ~2 ≈ 30, ~4 ≈ 51, ~5 ≈ 59, ~7 ≈ 72, ~13 ≈ 90.
+ * So: new = barely seen, learning = a few recent sightings, familiar = many
+ * recent sightings, known = effectively mastered (or an explicit "I know this"
+ * click → 100). Because `level` is a derived cache, you can retune these `min`
+ * values freely — every word's status is recomputed, no data migration needed.
+ *
+ * NOTE: settingsWindow.js is an unbundled classic script and inlines a mirror
+ * of these thresholds — keep the two in sync.
+ */
+export const FAMILIARITY_TIERS = [
+  { key: "new", label: "New", min: 0 },
+  { key: "learning", label: "Learning", min: 25 },
+  { key: "familiar", label: "Familiar", min: 60 },
+  { key: "known", label: "Known", min: STOP_GLOSS_LEVEL },
+];
 
 /** A word is promoted to a tracked record on its Nth sighting (configurable). */
 export const DEFAULT_PROMOTION_THRESHOLD = 2;
@@ -71,10 +98,19 @@ export const OPENAI_TIMEOUT_MS = 20000;
 export const MSG = {
   TRANSLATE_BYOK: "lw_translate_byok",
   DEMOTE_WORD: "lw_demote_word",
+  /** M2.6: delete one word (bank record + its events). */
+  DELETE_WORD: "lw_delete_word",
+  /** M2.6: clear the entire word bank + event log. */
+  CLEAR_WORDBANK: "lw_clear_wordbank",
 };
 
-/** Familiarity a "known" word is reset to when the user demotes it (below STOP_GLOSS_LEVEL so it's glossed again). */
-export const DEMOTE_LEVEL = 20;
+/**
+ * Familiarity a "known" word is reset to when the user demotes it ("Review
+ * again"). Sits inside the "learning" tier (≥ FAMILIARITY_TIERS learning.min,
+ * < STOP_GLOSS_LEVEL) so the word is glossed again AND reads as "learning"
+ * (not "new") everywhere — a demoted word is one you're re-learning.
+ */
+export const DEMOTE_LEVEL = 30;
 
 // ---------------------------------------------------------------------
 // M1 — exposure/review event log (IndexedDB) + derived familiarity
@@ -121,3 +157,74 @@ export const CALIBRATION_BANDS = 12;
 
 /** Words sampled per band (total test length = bands × this). */
 export const CALIBRATION_PER_BAND = 2;
+
+// ---------------------------------------------------------------------
+// M2.1 — spaced-repetition scheduler (Leitner boxes + SM-2 ease)
+// ---------------------------------------------------------------------
+
+/** Grade buttons shown on a review card, weakest → strongest recall. */
+export const GRADES = ["again", "hard", "good", "easy"];
+
+/**
+ * Leitner scheduler tunables (core/srs.js). A word lives in a box 1..BOXES;
+ * each box has a base review interval in days. Recalling a word moves it up a
+ * box (longer interval); forgetting it ("again") resets it to box 1. The SM-2
+ * `ease` factor is a per-word multiplier that "again"/"hard" shrink and "easy"
+ * grows, so the schedule personalises over time without leaving the Leitner
+ * frame. All math is pure + deterministic → unit-tested ("store facts").
+ */
+export const LEITNER = {
+  /** Number of Leitner boxes. */
+  BOXES: 5,
+  /**
+   * Base interval (days) for each box, indexed by box number.
+   * Index 0 is unused (boxes are 1-based); box 1 = 1 day … box 5 = 35 days.
+   */
+  INTERVALS_DAYS: [0, 1, 3, 7, 16, 35],
+  /** Interval (days) applied on "again" — re-show this session (due now). */
+  AGAIN_INTERVAL_DAYS: 0,
+  /** Default SM-2 ease for a brand-new word. */
+  DEFAULT_EASE: 2.5,
+  /** Ease is clamped to this range so it never runs away or collapses. */
+  MIN_EASE: 1.3,
+  MAX_EASE: 3.0,
+  /** How much each grade nudges the ease factor. */
+  EASE_DELTA: { again: -0.2, hard: -0.15, good: 0, easy: 0.15 },
+  /** "hard" keeps the word in its box at a fraction of the box interval. */
+  HARD_INTERVAL_FACTOR: 0.5,
+};
+
+/** Map a grade to an SM-2-style recall quality (0–5) stored on the review event. */
+export const GRADE_QUALITY = { again: 1, hard: 3, good: 4, easy: 5 };
+
+/** Max cards surfaced in a single review session (keeps the queue manageable). */
+export const REVIEW_SESSION_LIMIT = 40;
+
+// ---------------------------------------------------------------------
+// M2.3 — pronunciation audio (Web Speech API)
+// ---------------------------------------------------------------------
+
+/** Text-to-speech defaults: English voice, slightly slowed for learners. */
+export const SPEECH = {
+  LANG: "en-US",
+  RATE: 0.95,
+};
+
+// ---------------------------------------------------------------------
+// M3.1 — progress dashboard stats aggregation (core/stats.js)
+// ---------------------------------------------------------------------
+
+/**
+ * Stats tunables. Like familiarity, the dashboard numbers are DERIVED from the
+ * bank + event logs — store facts, derive scores — so these can change freely
+ * (no migration). All stats math is pure + deterministic → unit-tested.
+ *  - ACTIVITY_DAYS: length (days) of the activity series the dashboard plots.
+ *  - WEEK_DAYS: "this week" window used for added/learned recency counts.
+ *  - CORRECT_QUALITY_MIN: a review counts as "correct" at this SM-2 quality or
+ *    above (GRADE_QUALITY good=4, easy=5 → correct; again=1, hard=3 → not).
+ */
+export const STATS = {
+  ACTIVITY_DAYS: 30,
+  WEEK_DAYS: 7,
+  CORRECT_QUALITY_MIN: 4,
+};

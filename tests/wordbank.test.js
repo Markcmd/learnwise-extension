@@ -20,9 +20,18 @@ describe("normalizeWord", () => {
 });
 
 describe("deriveStatus", () => {
-  it("maps level to status", () => {
+  it("maps level to the canonical 4 tiers (new/learning/familiar/known)", () => {
+    // new: 0–24
     expect(deriveStatus(0)).toBe("new");
-    expect(deriveStatus(1)).toBe("learning");
+    expect(deriveStatus(1)).toBe("new");
+    expect(deriveStatus(24)).toBe("new");
+    // learning: 25–59
+    expect(deriveStatus(25)).toBe("learning");
+    expect(deriveStatus(59)).toBe("learning");
+    // familiar: 60–89
+    expect(deriveStatus(60)).toBe("familiar");
+    expect(deriveStatus(89)).toBe("familiar");
+    // known: ≥90 (== STOP_GLOSS_LEVEL)
     expect(deriveStatus(90)).toBe("known");
     expect(deriveStatus(100)).toBe("known");
   });
@@ -34,7 +43,7 @@ describe("createWordRecord", () => {
     expect(r.word).toBe("word");
     expect(r.meaning).toBe("意思");
     expect(r.level).toBe(1);
-    expect(r.status).toBe("learning");
+    expect(r.status).toBe("new"); // default level 1 → "new" under the 4-tier rule
     expect(r.source).toBe("read");
     expect(r.readCount).toBe(1);
     expect(r.firstSeenAt).toBe(NOW);
@@ -89,7 +98,7 @@ describe("insertWords", () => {
     insertWords(bank, { keep: { meaning: "NEW" }, fresh: { meaning: "新" } }, NOW);
     expect(bank.keep.meaning).toBe("原"); // untouched
     expect(bank.fresh.meaning).toBe("新");
-    expect(bank.fresh.status).toBe("learning");
+    expect(bank.fresh.status).toBe("new"); // level 1 default → "new"
   });
 });
 

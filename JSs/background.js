@@ -6,14 +6,15 @@
 // Bundled into dist/ by esbuild.
 // =====================================================================
 import { getLocal, setLocal } from "./core/storage.js";
-import { STORAGE_KEYS, CURRENT_SCHEMA_VERSION, MSG } from "./core/constants.js";
+import { STORAGE_KEYS, CURRENT_SCHEMA_VERSION, MSG, IDB } from "./core/constants.js";
 import { runMigration } from "./core/migration.js";
 import { pruneEvents } from "./core/pruning.js";
 import { validateApiKey } from "./core/translation.js";
 import { getByokConfig } from "./core/byokSettings.js";
 import { fetchByokTranslations, LlmError } from "./dom/llm.js";
-import { getWordBank, setWordBank, demoteWord } from "./core/wordbank.js";
+import { getWordBank, setWordBank, demoteWord, deleteWord } from "./core/wordbank.js";
 import { deleteEventsForWord } from "./core/events.js";
+import { clearStore } from "./core/idb.js";
 
 async function ensureDefaults() {
   const res = await getLocal([
@@ -129,6 +130,38 @@ async function handleDemoteWord(msg) {
   return { ok: true, removedEvents: removed };
 }
 
+// Delete one word: remove its bank record and clear its events so derived
+// familiarity can't resurrect it on the next reading pass (M2.6).
+async function handleDeleteWord(msg) {
+  const word = msg?.word;
+  const bank = await getWordBank();
+  deleteWord(bank, word);
+  await setWordBank(bank);
+  let removed = 0;
+  try {
+    removed = await deleteEventsForWord(word);
+  } catch (e) {
+    console.warn("[LearnWise] clearing events on delete failed:", e);
+  }
+  return { ok: true, removedEvents: removed };
+}
+
+// Clear everything the user has accumulated: the word bank, the sighting
+// counters, and the full IndexedDB event + review log (M2.6). Settings/
+// onboarding flags are intentionally preserved.
+async function handleClearWordBank() {
+  await setWordBank({});
+  await setLocal({ [STORAGE_KEYS.SIGHTINGS]: {} });
+  for (const store of [IDB.STORES.EVENTS, IDB.STORES.REVIEWS]) {
+    try {
+      await clearStore(store);
+    } catch (e) {
+      console.warn(`[LearnWise] clearing ${store} failed:`, e);
+    }
+  }
+  return { ok: true };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === MSG.TRANSLATE_BYOK) {
     handleByokTranslate(msg).then(sendResponse, (e) => {
@@ -141,6 +174,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === MSG.DEMOTE_WORD) {
     handleDemoteWord(msg).then(sendResponse, (e) =>
+      sendResponse({ ok: false, error: String(e?.message || e) })
+    );
+    return true;
+  }
+  if (msg?.type === MSG.DELETE_WORD) {
+    handleDeleteWord(msg).then(sendResponse, (e) =>
+      sendResponse({ ok: false, error: String(e?.message || e) })
+    );
+    return true;
+  }
+  if (msg?.type === MSG.CLEAR_WORDBANK) {
+    handleClearWordBank().then(sendResponse, (e) =>
       sendResponse({ ok: false, error: String(e?.message || e) })
     );
     return true;

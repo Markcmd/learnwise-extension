@@ -1,81 +1,174 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>LearnWise</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LearnWise Settings</title>
+  <link rel="stylesheet" href="../CSSs/settings.css" />
 </head>
 <body>
-  <h1>LearnWise Settings</h1>
+  <header class="lw-page-header">
+    <img src="../icons/LEARNWISE_48.png" alt="" />
+    <div>
+      <h1>LearnWise Settings</h1>
+      <div class="sub">Manage translations and your word bank</div>
+    </div>
+
+    <div class="theme-toggle" role="group" aria-label="Color theme">
+      <button id="themeLight" class="theme-btn" type="button" title="Light" aria-label="Light theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"></path>
+        </svg>
+      </button>
+      <button id="themeDark" class="theme-btn" type="button" title="Dark" aria-label="Dark theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
   <div id="app">
-    <section style="margin: 12px 0; padding: 12px; border: 1px solid #ccc; border-radius: 8px; max-width: 640px;">
-      <h2 style="margin: 0 0 8px; font-size: 16px;">Smart translations (bring your own key)</h2>
-      <p style="font-size: 12px; opacity: 0.8; margin: 0 0 10px;">
-        Off by default. When enabled, the word and its sentence are sent to
-        <b>your own</b> AI provider account using the key below — the key is stored only on
-        this device and is never sent anywhere else. Leave the source on "local" to stay
-        fully offline. Each provider keeps its own key, so you can switch freely.
-      </p>
-
-      <div style="display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; align-items: center;">
-        <label for="translationSource">Translation source</label>
-        <select id="translationSource">
-          <option value="local">local (offline dictionary)</option>
-          <option value="byok">smart (your API key)</option>
-        </select>
-
-        <label for="byokProvider" class="byokOnly">Provider</label>
-        <select id="byokProvider" class="byokOnly"></select>
-
-        <label for="byokModel" class="byokOnly">Model</label>
-        <span id="byokModelCell" class="byokOnly">
-          <select id="byokModel"></select>
-          <input id="byokModelCustom" type="text" placeholder="model name (e.g. llama3.1)"
-                 spellcheck="false" style="display:none; font-family: monospace; width: 100%;" />
+    <!-- M3.2: progress stats (rendered by dashboard.js) -->
+    <section class="card" id="progressCard">
+      <div class="lw-db-panelhead">
+        <h2>Progress</h2>
+        <span class="lw-db-legend">
+          <button id="openReview" type="button">Review</button>
+          <button id="refreshBtn" type="button" title="Reload stats">Refresh</button>
         </span>
-
-        <label for="byokBaseUrl" id="byokBaseUrlLabel">Base URL</label>
-        <span id="byokBaseUrlRow">
-          <input id="byokBaseUrl" type="text" placeholder="http://localhost:11434/v1"
-                 spellcheck="false" style="font-family: monospace; width: 100%;" />
-          <button id="btnGrantHost" type="button" style="margin-top: 4px;">Grant access to this URL</button>
-        </span>
-
-        <label for="byokKey" class="byokOnly">API key</label>
-        <input id="byokKey" type="password" class="byokOnly" placeholder="sk-..." autocomplete="off"
-               spellcheck="false" style="font-family: monospace;" />
       </div>
 
-      <div id="byokButtons" style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
-        <button id="btnSaveKey">Save</button>
-        <button id="btnTestKey">Save &amp; test</button>
-        <span id="byokStatus" style="font-size: 12px; opacity: 0.9;"></span>
+      <!-- Loading -->
+      <div id="loading" class="lw-db-state">Loading your progress…</div>
+
+      <!-- Empty -->
+      <div id="empty" class="lw-db-state" hidden>
+        <div class="lw-db-emoji" aria-hidden="true">📚</div>
+        <p class="empty-title">No progress yet</p>
+        <p class="lw-db-muted" id="emptyNote">
+          Start reading the web with LearnWise on, or run a review — your stats
+          will appear here as words and reviews build up.
+        </p>
+        <button class="btn-primary" id="emptyReview" type="button">Start a review</button>
+      </div>
+
+      <!-- Stats -->
+      <div id="dash" hidden>
+        <div class="lw-db-cards">
+          <div class="lw-db-card"><div class="lw-db-cardval" id="statTracked">0</div><div class="lw-db-cardlabel">Words tracked</div></div>
+          <div class="lw-db-card"><div class="lw-db-cardval" id="statKnown">0</div><div class="lw-db-cardlabel">Known</div></div>
+          <div class="lw-db-card"><div class="lw-db-cardval" id="statAdded">0</div><div class="lw-db-cardlabel">Added this week</div></div>
+          <div class="lw-db-card lw-db-card-streak">
+            <div class="lw-db-cardval"><span id="statStreak">0</span> <span class="lw-db-flame" aria-hidden="true">🔥</span></div>
+            <div class="lw-db-cardlabel">Day streak (<span id="statStreakUnit">days</span>)</div>
+          </div>
+          <div class="lw-db-card"><div class="lw-db-cardval" id="statReviews">0</div><div class="lw-db-cardlabel">Reviews done</div></div>
+          <div class="lw-db-card"><div class="lw-db-cardval" id="statAccuracy">—</div><div class="lw-db-cardlabel">Review accuracy</div></div>
+        </div>
+
+        <div class="lw-db-streaksub lw-db-muted" id="streakSub"></div>
+
+        <div class="lw-db-grid">
+          <section class="lw-db-panel">
+            <div class="lw-db-panelhead"><h3>Familiarity</h3><span class="lw-db-muted" id="distTotal"></span></div>
+            <div class="lw-db-distchart" id="distChart"></div>
+          </section>
+
+          <section class="lw-db-panel">
+            <div class="lw-db-panelhead"><h3>Review accuracy</h3></div>
+            <div class="lw-db-accwrap">
+              <div class="lw-db-ring" id="accuracyRing"></div>
+              <div class="lw-db-accright">
+                <div class="lw-db-muted" id="accuracyNote"></div>
+                <div class="lw-db-grades" id="gradeBreakdown"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="lw-db-panel lw-db-panel-wide">
+            <div class="lw-db-panelhead">
+              <h3>Activity</h3>
+              <span class="lw-db-legend">
+                <span class="lw-db-key"><i style="background:var(--lw-act-read)"></i>Reading</span>
+                <span class="lw-db-key"><i style="background:var(--lw-act-review)"></i>Reviews</span>
+              </span>
+            </div>
+            <div class="lw-db-activity" id="activityChart"></div>
+            <div class="lw-db-axis" id="activityAxis"></div>
+            <div class="lw-db-muted lw-db-actsum" id="activitySummary"></div>
+          </section>
+        </div>
       </div>
     </section>
 
-    <div style="margin: 12px 0;">
-      <button id="btnRefresh">Refresh</button>
-      <button id="btnDownload">Download</button>
-      <button id="btnOnboarding" style="margin-left: 8px;">Redo vocabulary setup</button>
-      <!-- <button id="btnClear" style="margin-left: 8px;">Clear Word Bank</button> -->
-    </div>
+    <!-- D-009: word bank — search + clickable list -->
+    <section class="card">
+      <h2>Your word bank</h2>
 
-    <div id="status" style="font-size: 12px; opacity: 0.8; margin: 6px 0;"></div>
+      <!-- D-007: friendly empty state -->
+      <div id="emptyState" class="empty-state" hidden>
+        <div class="empty-emoji" aria-hidden="true">📖</div>
+        <p class="empty-title">No words yet</p>
+        <p class="empty-sub">Browse the web as usual — words you meet get added here automatically.</p>
+      </div>
 
-    <table border="1" cellspacing="0" cellpadding="6" style="border-collapse: collapse; width: 100%;">
-      <thead>
-        <tr>
-          <th style="text-align:left;">Word</th>
-          <th style="text-align:left;">Meaning</th>
-          <th style="text-align:left;">Pronunciation</th>
-          <th style="text-align:right;">Level</th>
-          <th style="text-align:right;">Read</th>
-          <th style="text-align:left;">Updated</th>
-          <th style="text-align:left;">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="wordbankRows"></tbody>
-    </table>
+      <div id="dashboard">
+        <!-- D-004: search + actions -->
+        <div class="toolbar">
+          <input id="wordSearch" type="search" placeholder="Search words…" autocomplete="off" spellcheck="false" />
+          <span class="spacer"></span>
+          <button id="btnRefresh">Refresh</button>
+          <button id="btnDownload" title="Download a backup of your word bank">Export</button>
+          <button id="btnImport" title="Restore from a backup file (merges, newer wins)">Import</button>
+          <input id="importFile" type="file" accept="application/json,.json" hidden />
+        </div>
+
+        <div id="status"></div>
+
+        <!-- D-009: clickable word list with detail-on-click -->
+        <div id="wordList" class="word-list"></div>
+      </div>
+    </section>
+
+    <!-- M2.4: automatic difficulty decks -->
+    <section class="card" id="decksCard">
+      <h2>Decks</h2>
+      <p class="desc">Your words, automatically grouped by difficulty — based on how common each word is. These update themselves; there's nothing to set up.</p>
+      <div id="deckList" class="deck-list"></div>
+    </section>
+
+    <!-- D-001: smart translations gated as "coming soon" -->
+    <section class="card coming-soon-card">
+      <div class="cs-row">
+        <div>
+          <h2>Smart translations</h2>
+          <p class="desc">AI-powered meanings, no setup needed. Local offline dictionary is active now.</p>
+        </div>
+        <span class="cs-badge">Coming soon</span>
+      </div>
+    </section>
+
+    <!-- D-010: setup moved to the bottom, away from daily controls -->
+    <section class="card setup-card">
+      <h2>Vocabulary setup</h2>
+      <p class="desc">Re-run the initial setup to tell LearnWise which words you already know.</p>
+      <button id="btnOnboarding">Redo vocabulary setup</button>
+    </section>
+
+    <!-- M2.6: danger zone -->
+    <section class="card danger-card">
+      <h2>Clear word bank</h2>
+      <p class="desc">Permanently delete every saved word and your reading history. Your setup and settings are kept. This can't be undone.</p>
+      <button id="btnClearAll" class="danger-btn">Clear all words</button>
+    </section>
   </div>
-  
+
+  <!-- Stats (bundled, imports core/stats.js) + management (classic). -->
+  <script src="../dist/dashboard.js"></script>
   <script src="../JSs/settingsWindow.js"></script>
 </body>
 </html>

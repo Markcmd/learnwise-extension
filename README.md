@@ -37,4 +37,4 @@ tests/                # Vitest, mirrors core/
 dist/                 # esbuild output (generated, git-ignored)
 ```
 
-See `PLAN.md`, `DESIGN.md`, and `ESTIMATES.md` for the full product plan.
+See `dev-notes/planning/` (`PLAN.md`, `DESIGN.md`, `ESTIMATES.md`) for the full product plan.
