@@ -188,8 +188,61 @@ A Chrome extension (Manifest V3) that helps people learn English vocabulary whil
     Manifest → **1.0.11**. Full write-up:
     `dev-notes/session-logs/2026-06-29-merge-dashboard-settings.md`.
 
-## Next action: **M4 — Launch (Chrome Web Store)** (see ESTIMATES.md → M4)
-**M3 is complete** — the product is feature-complete for v1. Next is the launch milestone: **4.1 privacy policy + in-app note** (domain-only logging + BYO-key data flow), **4.2 permission audit** (justify `<all_urls>`, `unlimitedStorage`, drop anything unused), **4.3 store listing assets** (screenshots, promo tile, description, category), **4.4 package + submit**. No more core feature work planned for v1; v2 (paid tier — accounts, cloud sync, managed translations) is a separate milestone-set, not to start until v1 has real users.
+- **M4 task 4.1 — Privacy policy + in-app note — DONE**:
+  - Wrote the privacy policy grounded in the verified data flow: **all storage
+    local** (`chrome.storage.local` + IndexedDB), **no server, no analytics**
+    (grep-confirmed the only `fetch` is the BYOK provider call + local ECDICT/
+    `frequency.json`), **domain-only logging by default** (full-URL opt-in via
+    `LOG_FULL_URL`, default off), **90-day retention** (`EVENT_RETENTION_DAYS`),
+    and BYOK as the only off-device path (sends word(s) + one context sentence to
+    the user's chosen provider with their own key; key read only in background).
+    Permissions justified to match `manifest.json`.
+  - Files: **`docs/privacy-policy.md`** (source) + **`docs/index.html`**
+    (standalone, theme-aware, GitHub-Pages-ready at `/docs` → site root).
+  - **To publish:** push `docs/`, then repo Settings → Pages → branch `main`,
+    folder `/docs`; use the resulting URL in the store listing. Confirm the
+    contact email (currently the dev gmail).
+  - **In-app note done:** a **Privacy** card at the bottom of
+    `HTMLs/settingsWindow.html` (local-only blurb + "Read the full privacy
+    policy →" link to `https://markcmd.github.io/learnwise-extension/`), themed
+    link style in `CSSs/settings.css`. No rebuild (classic page/CSS).
+  - **Caveat:** Settings "Smart translations" is gated **"Coming soon"** (D-001)
+    while the policy describes BYOK as opt-in-available — decide at launch whether
+    to enable BYOK or soften the wording. Full write-up:
+    `dev-notes/session-logs/2026-06-29-m4.1-privacy-policy.md`.
+
+- **M4 task 4.2 — Permission audit — DONE**:
+  - Audited every manifest permission against real code usage. **Dropped
+    `activeTab`** (unused — no `executeScript`/`scripting`/`captureVisibleTab`/
+    `tab.url`/`action.onClicked`; the `chrome.tabs.create|getCurrent|remove`
+    calls need no permission, and `<all_urls>` already covers page access). Kept
+    `storage`, `unlimitedStorage`, the three provider `host_permissions`, the
+    optional custom-endpoint hosts, `<all_urls>` content script, and the
+    web-accessible ECDICT/frequency resources — each justified.
+  - `manifest.json` **1.0.11 → 1.0.12** (manifest-only; **no rebuild**).
+  - **`docs/store-permission-justifications.md`** — paste-ready review-form text
+    (single purpose, per-permission justifications, no-remote-code, data-use
+    disclosures). Full write-up:
+    `dev-notes/session-logs/2026-06-29-m4.2-permission-audit.md`.
+
+- **M4 task 4.3 — Store listing assets — DONE (copy + plan + art); capture step is on Mark**:
+  - Verified current store specs (screenshots 1280×800 ×1–5; small promo tile
+    **440×280** mandatory, marquee **1400×560** optional; icon 128×128; category
+    **Education**).
+  - **`docs/store-listing-copy.md`** — 132-char summary + full detailed
+    description (balanced learning/privacy), category, optional URLs.
+  - **`docs/store-screenshots-shotlist.md`** — 5-shot plan (glossing hero →
+    review → dashboard → word bank → privacy/onboarding) with captions + capture
+    tips.
+  - **Screenshots CAPTURED + finalized** → `docs/assets/screenshots/store-shot-1..5.png`,
+    all exactly **1280×800** (Pillow scale-to-fit + bg-color pad). Shot-1 redone
+    taller (near full-bleed hero). All 5 solid.
+  - **Promo tiles generated** (brand gradient + Poppins + 词汇/vocabulary gloss
+    demo): `docs/assets/promo-tile-440x280.png` + `promo-marquee-1400x560.png`.
+  - Full write-up: `dev-notes/session-logs/2026-06-29-m4.3-store-assets.md`.
+
+## Next action: **M4.4 — Package + submit (Chrome Web Store)** (see ESTIMATES.md → M4)
+**M3 is complete** — the product is feature-complete for v1. Launch milestone status: **4.1 privacy policy + in-app note — DONE**, **4.2 permission audit — DONE**, **4.3 store listing assets — DONE** (copy + shot-list + promo tiles; Mark still captures the 5 screenshots), **4.4 package + submit — NOT STARTED** (zip, register dev account, upload, fill listing/privacy forms, submit). Pre-submit carryovers: publish the 4.1 privacy policy on GitHub Pages; decide BYOK enable-vs-"coming soon" wording so the UI, policy, and listing copy agree. No more core feature work planned for v1; v2 (paid tier — accounts, cloud sync, managed translations) is a separate milestone-set, not to start until v1 has real users.
 
 > Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's start M4 (launch prep)."
 

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LearnWise — Privacy Policy</title>
+<meta name="description" content="Privacy policy for the LearnWise Chrome extension. No server, no analytics; all data stored locally on your device.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1c1e21;
+    --muted: #5b6370;
+    --accent: #2f6f4f;
+    --border: #e3e6ea;
+    --card: #f6f8f7;
+    --link: #246b46;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c;
+      --fg: #e7eaee;
+      --muted: #9aa3af;
+      --accent: #6fc79a;
+      --border: #2a2e35;
+      --card: #1d2024;
+      --link: #7fd3a6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 22px 72px; }
+  header { border-bottom: 2px solid var(--border); padding-bottom: 22px; margin-bottom: 30px; }
+  h1 { font-size: 2rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .tagline { color: var(--muted); margin: 0; font-size: 1rem; }
+  .dates { color: var(--muted); font-size: 0.9rem; margin-top: 14px; }
+  h2 { font-size: 1.3rem; margin: 38px 0 12px; padding-top: 6px; }
+  h3 { font-size: 1.08rem; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--link); }
+  ul { padding-left: 1.25em; margin: 0 0 14px; }
+  li { margin: 0 0 8px; }
+  strong { font-weight: 650; }
+  .lead {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 0 0 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 18px;
+    font-size: 0.97rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { background: var(--card); }
+  td:last-child { white-space: nowrap; font-weight: 600; }
+  code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.88em;
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>LearnWise — Privacy Policy</h1>
+    <p class="tagline">Learn English vocabulary while you read the web.</p>
+    <p class="dates"><strong>Effective:</strong> June 29, 2026 &nbsp;·&nbsp; <strong>Last updated:</strong> June 29, 2026</p>
+  </header>
+
+  <p>LearnWise is a Chrome extension that helps you learn English vocabulary while
+  you read the web. It glosses unfamiliar words inline, tracks your familiarity in
+  a personal word bank, and offers spaced-repetition review.</p>
+
+  <p class="lead">The short version: <strong>LearnWise has no server, runs no
+  analytics, and stores everything on your own device.</strong> Nothing leaves
+  your computer unless you turn on the optional &ldquo;smart translation&rdquo;
+  feature, which uses an AI provider and an API key that you supply.</p>
+
+  <h2>Summary</h2>
+  <table>
+    <tr><th>Do we run a server that receives your data?</th><td>No</td></tr>
+    <tr><th>Do we use analytics, tracking, or advertising?</th><td>No</td></tr>
+    <tr><th>Do we sell or share your data?</th><td>No</td></tr>
+    <tr><th>Where is your data stored?</th><td>Your device only</td></tr>
+    <tr><th>Does any data ever leave your device?</th><td>Only with opt-in smart translation</td></tr>
+  </table>
+
+  <h2>What LearnWise stores (all on your device)</h2>
+  <p>LearnWise saves the following locally, using the browser&rsquo;s built-in
+  extension storage (<code>chrome.storage.local</code>) and on-device database
+  (IndexedDB). This data never reaches us &mdash; we have no way to see it.</p>
+  <ul>
+    <li><strong>Your word bank</strong> &mdash; words you have encountered, their
+    meanings and pronunciations, your familiarity level for each, and
+    spaced-repetition review state.</li>
+    <li><strong>An exposure log</strong> &mdash; a record of which words you saw,
+    when, and on which <strong>website domain</strong>. By default this stores the
+    <strong>domain only</strong> (for example <code>example.com</code>), never the
+    full page address. You can optionally enable full-URL logging in Settings; it
+    is off by default.</li>
+    <li><strong>Review history</strong> &mdash; the results of your flashcard
+    reviews, used to schedule future reviews and to compute your progress
+    dashboard.</li>
+    <li><strong>Your settings</strong> &mdash; including, if you use smart
+    translation, your chosen AI provider, model, and API key. The API key is
+    stored locally and is only ever read inside the extension&rsquo;s background
+    process to make the request you asked for. It is never displayed back on web
+    pages and is never sent to us.</li>
+  </ul>
+  <p>You can edit or delete individual words at any time, and &ldquo;Clear all
+  words&rdquo; removes everything LearnWise has accumulated.</p>
+
+  <h2>What leaves your device</h2>
+
+  <h3>Default mode: nothing leaves your device</h3>
+  <p>By default, LearnWise looks up word meanings using a <strong>dictionary
+  bundled inside the extension</strong> (ECDICT, stored locally). In this mode,
+  LearnWise makes <strong>no network requests</strong> for translations &mdash; it
+  works fully offline, and no information about what you read is transmitted
+  anywhere.</p>
+
+  <h3>Optional &ldquo;smart (BYO-key) translation&rdquo;</h3>
+  <p>If &mdash; and only if &mdash; you turn on smart translation in Settings and
+  provide your own API key, LearnWise will contact the AI provider <strong>you</strong>
+  select. The supported providers are OpenAI, Anthropic, OpenRouter, and any
+  OpenAI-compatible &ldquo;custom&rdquo; endpoint you configure (including a local
+  one).</p>
+  <p>When this mode is on, each translation request sends to that provider:</p>
+  <ul>
+    <li>the <strong>word or words</strong> to be defined, and</li>
+    <li>optionally, <strong>a single sentence of surrounding context</strong> from
+    the page where the word appeared, so the AI can pick the meaning that fits.</li>
+  </ul>
+  <p>This request is made directly from your browser to the provider, using your
+  own API key. <strong>It does not pass through any LearnWise server</strong> (we
+  don&rsquo;t operate one). The data you send is handled under <strong>that
+  provider&rsquo;s</strong> privacy policy and terms &mdash; please review them:</p>
+  <ul>
+    <li>OpenAI: <a href="https://openai.com/policies/privacy-policy">openai.com/policies/privacy-policy</a></li>
+    <li>Anthropic: <a href="https://www.anthropic.com/legal/privacy">anthropic.com/legal/privacy</a></li>
+    <li>OpenRouter: <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a></li>
+    <li>A &ldquo;custom&rdquo; endpoint is governed by whoever operates it.</li>
+  </ul>
+  <p>If a smart-translation request fails or you are offline, LearnWise quietly
+  falls back to the bundled local dictionary.</p>
+
+  <h2>Permissions, and why LearnWise asks for them</h2>
+  <ul>
+    <li><strong>Read and change data on websites you visit</strong>
+    (<code>&lt;all_urls&gt;</code> content script) &mdash; required so LearnWise can
+    find words on the page and show inline meanings. The extension reads page text
+    locally to do this; it does not send page content anywhere except, in
+    smart-translation mode, the single word/context sentence described above.</li>
+    <li><strong>Storage / unlimited storage</strong> &mdash; to keep your word
+    bank, logs, and settings on your device. &ldquo;Unlimited&rdquo; storage is
+    requested because a large vocabulary history can exceed the small default
+    quota.</li>
+    <li><strong>Access to AI provider domains</strong> (<code>api.openai.com</code>,
+    <code>api.anthropic.com</code>, <code>openrouter.ai</code>) &mdash; used only to
+    make smart-translation requests when you have enabled that feature and supplied
+    a key. If you configure a custom endpoint, the extension asks for permission to
+    that specific address at the time you set it up.</li>
+  </ul>
+
+  <h2>Data retention</h2>
+  <p>Everything is kept locally until you remove it. The exposure log is
+  automatically pruned over time &mdash; entries older than roughly 90 days are
+  collapsed into per-word summary counts and the detailed records are deleted.
+  Uninstalling the extension removes its locally stored data through the
+  browser.</p>
+
+  <h2>Children&rsquo;s privacy</h2>
+  <p>LearnWise is a general-audience learning tool and is not directed at children
+  under 13. It does not knowingly collect personal information from children.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the &ldquo;Last updated&rdquo; date above will change
+  and the revised policy will be posted at this page. Material changes will be
+  reflected in the extension&rsquo;s listing.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy or your data? Contact the developer at
+  <a href="mailto:lovekinball311@gmail.com">lovekinball311@gmail.com</a>.</p>
+
+  <footer>LearnWise &mdash; a privacy-first vocabulary extension. No server, no tracking.</footer>
+</div>
+</body>
+</html>

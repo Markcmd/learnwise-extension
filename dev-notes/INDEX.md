@@ -49,3 +49,6 @@ dev-notes/
 - [2026-06-29 — M3.1: stats aggregation (test-first, pure)](session-logs/2026-06-29-m3.1-stats.md)
 - [2026-06-29 — M3.2: charts + dashboard page (M3 complete)](session-logs/2026-06-29-m3.2-dashboard.md)
 - [2026-06-29 — Merge dashboard + settings into one page](session-logs/2026-06-29-merge-dashboard-settings.md)
+- [2026-06-29 — M4.1: privacy policy (GitHub Pages, launch prep)](session-logs/2026-06-29-m4.1-privacy-policy.md)
+- [2026-06-29 — M4.2: permission audit (dropped activeTab; store justifications)](session-logs/2026-06-29-m4.2-permission-audit.md)
+- [2026-06-29 — M4.3: store listing assets (copy + shot-list + promo tiles)](session-logs/2026-06-29-m4.3-store-assets.md)

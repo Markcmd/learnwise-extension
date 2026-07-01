@@ -559,3 +559,11 @@ button.btn-primary:hover { filter: brightness(1.06); color: var(--lw-on-accent);
   cursor: pointer;
 }
 .danger-btn:hover { background: var(--lw-danger); color: #fff; }
+
+/* M4.1: in-app privacy note */
+.privacy-card a {
+  color: var(--lw-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.privacy-card a:hover { text-decoration: underline; }
