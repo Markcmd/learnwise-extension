@@ -4,13 +4,14 @@ Paste these into the **Privacy practices** tab of the developer dashboard. Each
 field below maps to a prompt Google's review form asks for. Keep them short and
 specific — vague justifications are a common rejection cause.
 
-Current manifest (v1.0.12) declares:
+Current manifest (v1.0.13) declares:
 
 - `permissions`: `storage`, `unlimitedStorage`
-- `host_permissions`: `https://api.openai.com/*`, `https://api.anthropic.com/*`, `https://openrouter.ai/*`
-- `optional_host_permissions`: `http://*/*`, `https://*/*`
 - content script `matches`: `<all_urls>`
-- (Dropped in 4.2: `activeTab` — was unused.)
+- **No host permissions.** (Dropped in 4.2: `activeTab`. Dropped in the
+  pre-launch review: the OpenAI/Anthropic/OpenRouter `host_permissions` and the
+  broad `optional_host_permissions` — the BYOK "smart translation" feature ships
+  disabled in v1, so those were unused. They'll return when BYOK ships.)
 
 ---
 
@@ -34,33 +35,13 @@ Current manifest (v1.0.12) declares:
 > lets the extension keep a complete local learning history without hitting the
 > quota. All of it stays on the user's device.
 
-## Host permission: `api.openai.com`, `api.anthropic.com`, `openrouter.ai`
-
-> Used only for the optional "smart translation" feature. When a user explicitly
-> enables it and enters their own API key, the extension sends the word(s) being
-> defined (and optionally one sentence of page context) directly from the
-> browser to the provider the user chose, to get a higher-quality definition.
-> These hosts are the supported AI providers. The feature is off by default; with
-> it off, the extension makes no requests to these hosts and works fully offline
-> using a bundled local dictionary.
-
-## Optional host permissions: `http://*/*`, `https://*/*`
-
-> Optional (not granted at install). Requested at runtime only if a user
-> configures a "custom" OpenAI-compatible translation endpoint of their own
-> (including a self-hosted/local one). Because that endpoint can be any address
-> the user supplies, the extension requests permission to that specific origin at
-> the moment the user sets it up. Users who don't configure a custom endpoint are
-> never prompted.
-
 ## Host access for the content script: `<all_urls>`
 
 > The core feature — glossing unfamiliar words inline — must work on whatever
 > page the user is reading, so the content script needs to run on all sites. It
 > reads the page's visible text locally to find words and insert inline meanings.
-> Page content is not transmitted anywhere, except that in the optional
-> smart-translation mode a single word and one context sentence are sent to the
-> user's chosen AI provider (see above).
+> Page content is never transmitted anywhere; all lookups use a dictionary
+> bundled inside the extension and everything stays on the user's device.
 
 ## Remote code
 
@@ -69,10 +50,11 @@ Current manifest (v1.0.12) declares:
 
 ## Data usage disclosures (check on the form)
 
-- Does the extension collect/transmit user data? **Only with the user-enabled
-  smart-translation feature**, and then only to the user's chosen third-party AI
-  provider using the user's own key — never to a LearnWise server (there isn't
-  one). In default mode, nothing is collected or transmitted.
+- Does the extension collect/transmit user data? **No.** This version makes no
+  network requests and works fully offline; nothing is collected or transmitted.
+  (A future opt-in "smart translation" feature would send a word + context to a
+  user-chosen AI provider using the user's own key — never to a LearnWise server;
+  the policy will be updated before that ships.)
 - Personally identifiable info: **No** (extension does not collect names, emails,
   addresses, etc.).
 - Health / financial / authentication info: **No.**

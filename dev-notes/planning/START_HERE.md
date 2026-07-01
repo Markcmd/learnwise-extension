@@ -241,7 +241,30 @@ A Chrome extension (Manifest V3) that helps people learn English vocabulary whil
     demo): `docs/assets/promo-tile-440x280.png` + `promo-marquee-1400x560.png`.
   - Full write-up: `dev-notes/session-logs/2026-06-29-m4.3-store-assets.md`.
 
-## Next action: **M4.4 — Package + submit (Chrome Web Store)** (see ESTIMATES.md → M4)
+- **Pre-launch review (2026-06-30) — DONE**: full-project bug pass, no blocking
+  runtime bugs. Key fix: BYOK ships **disabled** (`FEATURE_BYOK=false`) so the
+  unused provider `host_permissions` + `optional_host_permissions` were removed
+  from `manifest.json` (**→ v1.0.13**, now storage+unlimitedStorage + `<all_urls>`
+  only), and the privacy policy / listing / in-app card were reworded to "fully
+  offline; smart translations coming later." Dead files
+  (`core/decks.js`, `data/commonWords.js`, `dom/openai.js`,
+  `HTMLs/dashboard.html`, `CSSs/dashboard.css`) flagged for deletion (couldn't
+  delete from the sandbox — Mark deletes on his Mac; the 4.4 package allowlist
+  excludes them regardless). Full write-up:
+  `dev-notes/problems/2026-06-30-pre-launch-review.md`.
+
+- **M4 task 4.4 — Package + submit — PREP DONE (submission is manual)**:
+  - **`package.sh`** — allowlist zip builder (runtime files only; manifest at
+    zip root; refuses if `dist/` unbuilt; strips junk). Verified in-sandbox: 49
+    files, no leaks, `→ dist-package/learnwise-v1.0.13.zip`.
+  - **`docs/store-submission-checklist.md`** — full dashboard walkthrough.
+  - **Mark's manual steps:** `rm CSSs/.__wtest`; `npm run build`; publish GitHub
+    Pages (policy URL); `./package.sh`; register $5 dev account; upload; fill
+    listing (EN/中文) + privacy tabs; submit. Full write-up:
+    `dev-notes/session-logs/2026-07-01-m4.4-package-submit.md`.
+
+## Next action: **M4.4 submit (manual) → then 4.5 Google review wait**. All build/asset prep for v1 is COMPLETE.
+Previously: **M4.4 — Package + submit (Chrome Web Store)** (see ESTIMATES.md → M4)
 **M3 is complete** — the product is feature-complete for v1. Launch milestone status: **4.1 privacy policy + in-app note — DONE**, **4.2 permission audit — DONE**, **4.3 store listing assets — DONE** (copy + shot-list + promo tiles; Mark still captures the 5 screenshots), **4.4 package + submit — NOT STARTED** (zip, register dev account, upload, fill listing/privacy forms, submit). Pre-submit carryovers: publish the 4.1 privacy policy on GitHub Pages; decide BYOK enable-vs-"coming soon" wording so the UI, policy, and listing copy agree. No more core feature work planned for v1; v2 (paid tier — accounts, cloud sync, managed translations) is a separate milestone-set, not to start until v1 has real users.
 
 > Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's start M4 (launch prep)."

@@ -52,3 +52,5 @@ dev-notes/
 - [2026-06-29 — M4.1: privacy policy (GitHub Pages, launch prep)](session-logs/2026-06-29-m4.1-privacy-policy.md)
 - [2026-06-29 — M4.2: permission audit (dropped activeTab; store justifications)](session-logs/2026-06-29-m4.2-permission-audit.md)
 - [2026-06-29 — M4.3: store listing assets (copy + shot-list + promo tiles)](session-logs/2026-06-29-m4.3-store-assets.md)
+- [2026-06-30 — Pre-launch code review (no blocking bugs; BYOK/perms reconciled)](problems/2026-06-30-pre-launch-review.md)
+- [2026-07-01 — M4.4: package script + submission checklist](session-logs/2026-07-01-m4.4-package-submit.md)

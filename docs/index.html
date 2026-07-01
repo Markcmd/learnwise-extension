@@ -97,9 +97,8 @@
   a personal word bank, and offers spaced-repetition review.</p>
 
   <p class="lead">The short version: <strong>LearnWise has no server, runs no
-  analytics, and stores everything on your own device.</strong> Nothing leaves
-  your computer unless you turn on the optional &ldquo;smart translation&rdquo;
-  feature, which uses an AI provider and an API key that you supply.</p>
+  analytics, stores everything on your own device, and sends nothing over the
+  network &mdash; it works fully offline.</strong></p>
 
   <h2>Summary</h2>
   <table>
@@ -107,7 +106,7 @@
     <tr><th>Do we use analytics, tracking, or advertising?</th><td>No</td></tr>
     <tr><th>Do we sell or share your data?</th><td>No</td></tr>
     <tr><th>Where is your data stored?</th><td>Your device only</td></tr>
-    <tr><th>Does any data ever leave your device?</th><td>Only with opt-in smart translation</td></tr>
+    <tr><th>Does any data ever leave your device?</th><td>No &mdash; fully offline</td></tr>
   </table>
 
   <h2>What LearnWise stores (all on your device)</h2>
@@ -126,48 +125,29 @@
     <li><strong>Review history</strong> &mdash; the results of your flashcard
     reviews, used to schedule future reviews and to compute your progress
     dashboard.</li>
-    <li><strong>Your settings</strong> &mdash; including, if you use smart
-    translation, your chosen AI provider, model, and API key. The API key is
-    stored locally and is only ever read inside the extension&rsquo;s background
-    process to make the request you asked for. It is never displayed back on web
-    pages and is never sent to us.</li>
+    <li><strong>Your settings</strong> &mdash; your preferences, such as theme and
+    how reading history is logged. (If the future opt-in &ldquo;smart&rdquo;
+    translation feature is added, any AI key you choose to enter would also be
+    stored locally only and never sent to us.)</li>
   </ul>
   <p>You can edit or delete individual words at any time, and &ldquo;Clear all
   words&rdquo; removes everything LearnWise has accumulated.</p>
 
   <h2>What leaves your device</h2>
-
-  <h3>Default mode: nothing leaves your device</h3>
-  <p>By default, LearnWise looks up word meanings using a <strong>dictionary
-  bundled inside the extension</strong> (ECDICT, stored locally). In this mode,
-  LearnWise makes <strong>no network requests</strong> for translations &mdash; it
+  <p><strong>Nothing.</strong> LearnWise looks up word meanings using a
+  <strong>dictionary bundled inside the extension</strong> (ECDICT, stored
+  locally). It makes <strong>no network requests</strong> to translate &mdash; it
   works fully offline, and no information about what you read is transmitted
   anywhere.</p>
 
-  <h3>Optional &ldquo;smart (BYO-key) translation&rdquo;</h3>
-  <p>If &mdash; and only if &mdash; you turn on smart translation in Settings and
-  provide your own API key, LearnWise will contact the AI provider <strong>you</strong>
-  select. The supported providers are OpenAI, Anthropic, OpenRouter, and any
-  OpenAI-compatible &ldquo;custom&rdquo; endpoint you configure (including a local
-  one).</p>
-  <p>When this mode is on, each translation request sends to that provider:</p>
-  <ul>
-    <li>the <strong>word or words</strong> to be defined, and</li>
-    <li>optionally, <strong>a single sentence of surrounding context</strong> from
-    the page where the word appeared, so the AI can pick the meaning that fits.</li>
-  </ul>
-  <p>This request is made directly from your browser to the provider, using your
-  own API key. <strong>It does not pass through any LearnWise server</strong> (we
-  don&rsquo;t operate one). The data you send is handled under <strong>that
-  provider&rsquo;s</strong> privacy policy and terms &mdash; please review them:</p>
-  <ul>
-    <li>OpenAI: <a href="https://openai.com/policies/privacy-policy">openai.com/policies/privacy-policy</a></li>
-    <li>Anthropic: <a href="https://www.anthropic.com/legal/privacy">anthropic.com/legal/privacy</a></li>
-    <li>OpenRouter: <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a></li>
-    <li>A &ldquo;custom&rdquo; endpoint is governed by whoever operates it.</li>
-  </ul>
-  <p>If a smart-translation request fails or you are offline, LearnWise quietly
-  falls back to the bundled local dictionary.</p>
+  <h3>Planned: optional &ldquo;smart&rdquo; translations (not in this version)</h3>
+  <p>A future version may add optional AI-powered definitions. If it does, the
+  feature will be strictly <strong>opt-in</strong> and will use an AI provider and
+  an API key that <strong>you</strong> supply &mdash; sending only the word (and
+  optionally one sentence of context) <strong>directly from your browser to the
+  provider you choose</strong>, never through a LearnWise server. This feature is
+  <strong>not enabled in the current version</strong>. This policy will be updated
+  to describe it in full before it ships.</p>
 
   <h2>Permissions, and why LearnWise asks for them</h2>
   <ul>
@@ -180,12 +160,9 @@
     bank, logs, and settings on your device. &ldquo;Unlimited&rdquo; storage is
     requested because a large vocabulary history can exceed the small default
     quota.</li>
-    <li><strong>Access to AI provider domains</strong> (<code>api.openai.com</code>,
-    <code>api.anthropic.com</code>, <code>openrouter.ai</code>) &mdash; used only to
-    make smart-translation requests when you have enabled that feature and supplied
-    a key. If you configure a custom endpoint, the extension asks for permission to
-    that specific address at the time you set it up.</li>
   </ul>
+  <p>LearnWise requests <strong>no host or network permissions</strong> in this
+  version &mdash; consistent with working fully offline.</p>
 
   <h2>Data retention</h2>
   <p>Everything is kept locally until you remove it. The exposure log is

@@ -71,11 +71,10 @@ option that's switched off by default). No analytics, no tracking, no ads.
 
 **Works offline**
 
-Out of the box, meanings come from a comprehensive English–Chinese dictionary
-bundled inside the extension, so glossing works with no internet connection and
-nothing leaves your computer. If you ever want AI-quality definitions, you can
-optionally connect your own AI provider key (OpenAI, Anthropic, OpenRouter, or a
-custom endpoint) — entirely your choice, and your key stays on your device.
+Meanings come from a comprehensive English–Chinese dictionary bundled inside the
+extension, so glossing works with no internet connection and nothing leaves your
+computer. (AI-powered "smart" definitions are coming in a future update — they'll
+be optional and use an AI key you supply.)
 
 **You're in control**
 
@@ -84,6 +83,61 @@ custom endpoint) — entirely your choice, and your key stays on your device.
 • Export your word bank to a file and import it back any time.
 
 Start reading, and let your vocabulary grow on its own.
+
+---
+
+## 中文版 listing (Simplified Chinese) — recommended for the CN audience
+
+> Since users read Simplified Chinese (the gloss language), lead the store
+> listing with Chinese. Two options: paste **Chinese only** (best if you're
+> targeting CN users and set the listing Language to Chinese), or paste
+> **Chinese first, then the English block above** as one bilingual description.
+
+### 简短描述 (summary — the manifest `description`, ≤132 characters)
+
+推荐（Chinese only）:
+
+> 边读网页边学英语单词：LearnWise 为生词显示行内中文释义，用间隔重复帮你记牢。完全离线、注重隐私，数据只存在你的设备上。
+
+双语备选（bilingual, watch the 132-char limit）:
+
+> 边读边学英语单词 · Learn English vocabulary as you read — 行内释义 + 间隔重复复习，完全离线、注重隐私。
+
+### 详细描述 (detailed description)
+
+**在阅读网页时，轻松学习英语词汇。**
+
+LearnWise 在你浏览网页时静静工作。当它发现你可能还不认识的单词时，会在单词旁边显示简短的中文释义——让你继续阅读，而不必中断去查词典。你遇到的每个单词都会记录在你的个人词库中，它会越来越了解你已经掌握了哪些词。
+
+**工作原理**
+
+• 正常阅读，LearnWise 会在语境中为生词添加行内释义。
+• 反复出现的单词会自动加入你的词库；你已经认识的单词则保持原样。
+• 用内置的间隔重复闪卡复习（Again / Hard / Good / Easy 四个等级），让你觉得最难的单词更频繁地出现，帮助你记牢。
+• 可朗读任意单词的发音。
+• 在内置的进度面板查看学习情况：已跟踪单词、已掌握单词、连续学习天数、复习正确率，以及最近 30 天的活动。
+• 通过快速的词汇量校准来设置起点，让 LearnWise 只标注高于你水平的单词，而不打扰你已经会的词。
+
+**注重隐私**
+
+LearnWise 把你的词库、阅读记录和设置只保存在你自己的设备上。没有账号，也没有服务器——你阅读的内容不会上传到任何地方，因为根本无处可传。阅读记录默认只按网站域名保存（记录完整网址是默认关闭的选项）。没有分析追踪，没有广告。
+
+**完全离线**
+
+释义来自内置的英汉词典，因此没有网络也能使用，任何数据都不会离开你的电脑。（AI 智能释义将在未来版本中推出——它将是可选的，并使用你自己提供的 AI 密钥。）
+
+**你完全掌控**
+
+• 点击你已经认识的单词，即可停止标注它。
+• 编辑或删除任意已保存的单词，或一键清空全部。
+• 可将词库导出为文件，随时重新导入。
+
+开始阅读，让你的词汇量自然增长。
+
+> **Listing Language field:** if you're primarily targeting CN users, set the
+> store listing's Language to **Chinese (Simplified)** so it surfaces in Chinese
+> searches. The screenshot captions in the shot-list are English — optionally
+> redo them in Chinese to match, but that's cosmetic.
 
 ---
 
@@ -101,10 +155,9 @@ Start reading, and let your vocabulary grow on its own.
 - The description mentions the **English–Chinese** dictionary (ECDICT) because
   that's what actually ships — keep this accurate; if you broaden languages
   later, update the copy.
-- BYOK smart translations are described as **optional**. If you launch with the
-  Settings "Smart translations" card still gated "Coming soon" (D-001), change
-  "you can optionally connect your own AI provider key" to "AI-quality
-  definitions are coming soon" to stay consistent with the UI. (Same caveat
-  flagged in the 4.1 log.)
+- BYOK smart translations ship **disabled** in v1 (D-001, `FEATURE_BYOK=false`),
+  so the copy says "coming soon" — kept consistent with the in-app card, the
+  privacy policy, and the manifest (provider host permissions were removed in the
+  pre-launch review; see `dev-notes/problems/2026-06-30-pre-launch-review.md`).
 - Avoid keyword stuffing — the copy above is deliberately readable; Google's
   spam policy penalizes repeated keywords.
