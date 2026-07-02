@@ -20,9 +20,9 @@ Cowork sandbox). Work top to bottom.
       Deploy from a branch → `main` / `/docs`. Confirm it loads at
       **https://markcmd.github.io/learnwise-extension/** (this exact URL is
       already referenced by the in-app Privacy card and the justifications doc).
-- [ ] **Package:** `./package.sh` → produces `dist-package/learnwise-v1.0.13.zip`
+- [x] **Package:** `./package.sh` → produces `dist-package/learnwise-v1.0.13.zip`
       (49 runtime files, `manifest.json` at root, no sources/tests/docs). The
-      script prints a sanity check confirming no leaks.
+      script prints a sanity check confirming no leaks. ✅ Done — v1.0.13 built.
 - [ ] **Smoke-test the packaged build:** at `chrome://extensions`, "Load
       unpacked" on `dist-package/stage/` (or unzip the zip and load that) — not
       your dev repo — and confirm glossing, review, dashboard, and settings all
@@ -34,10 +34,19 @@ Cowork sandbox). Work top to bottom.
       **$5** registration fee, paid with a Google account.
 - [ ] Complete the account/publisher details it asks for (name, contact email).
 
-## 2. Create the item + upload
+## 2. Upload into your existing item
 
-- [ ] Dashboard → **Add new item** → upload
-      `dist-package/learnwise-v1.0.13.zip`.
+> You already added an item in the dashboard earlier — **don't "Add new item."**
+> Open that existing item and upload the new package into it.
+
+- [ ] Open your existing item in the dashboard.
+- [ ] **If it's still a draft (never submitted):** upload
+      `dist-package/learnwise-v1.0.13.zip` as its package (this replaces the
+      earlier upload), then continue with the tabs below.
+- [ ] **If it was already published:** go to the **Package** section → **Upload
+      new package** → `dist-package/learnwise-v1.0.13.zip`. This creates a new
+      version that re-enters review. If the store says the version already
+      exists, bump `manifest.json` `version` (e.g. 1.0.14), rebuild, re-package.
 - [ ] Wait for it to process; fix any manifest warnings it surfaces.
 
 ## 3. Store listing tab
@@ -69,9 +78,12 @@ Source copy: **`docs/store-permission-justifications.md`**.
 - [ ] **Permission justifications** — only two to justify now: `storage`,
       `unlimitedStorage`, plus the `<all_urls>` host access for the content
       script (all in the doc). No provider host permissions anymore.
-- [ ] **Data usage disclosures** — tick the "does NOT collect/transmit" answers
-      per the doc (v1 is fully offline). Certify the three required statements
-      (no selling, no unrelated use, no creditworthiness use).
+- [ ] **Data usage disclosures** — Google requires disclosing **locally-handled**
+      data too (not just transmitted). Check **Website content** and **Web
+      history** (the exposure log records domains + timestamps of glossed pages);
+      leave the rest unchecked. Certify all three statements (no selling, no
+      unrelated use, no creditworthiness). Full rationale in
+      `store-permission-justifications.md`.
 - [ ] **Privacy policy URL:** paste **https://markcmd.github.io/learnwise-extension/**
       (must be live from step 0).
 

@@ -89,7 +89,11 @@ echo "Contents:"
 unzip -l "$ZIP" | awk 'NR>3 && $4!="" {print "   " $4}' | sed '/^   ----/d;/^   [0-9]* files/d' | head -60
 echo ""
 echo "Sanity checks:"
-unzip -l "$ZIP" | grep -q "^.*manifest.json$" && echo "   ✓ manifest.json at root" || echo "   ✗ manifest.json NOT at root!"
+if unzip -l "$ZIP" | awk '{print $NF}' | grep -qx "manifest.json"; then
+  echo "   ✓ manifest.json at root"
+else
+  echo "   ✗ manifest.json NOT at root!"
+fi
 if unzip -l "$ZIP" | grep -Eq "JSs/core/|JSs/dom/|node_modules/|tests/|dev-notes/|docs/|\.md$"; then
   echo "   ✗ WARNING: non-runtime files leaked into the zip — inspect above."
 else

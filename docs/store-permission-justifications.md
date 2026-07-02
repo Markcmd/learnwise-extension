@@ -48,21 +48,41 @@ Current manifest (v1.0.13) declares:
 > No. The extension executes no remotely hosted code. All scripts are packaged in
 > the extension; the bundled local dictionary is the default translation source.
 
-## Data usage disclosures (check on the form)
+## Data usage disclosures (Privacy practices → Data usage)
 
-- Does the extension collect/transmit user data? **No.** This version makes no
-  network requests and works fully offline; nothing is collected or transmitted.
-  (A future opt-in "smart translation" feature would send a word + context to a
-  user-chosen AI provider using the user's own key — never to a LearnWise server;
-  the policy will be updated before that ships.)
-- Personally identifiable info: **No** (extension does not collect names, emails,
-  addresses, etc.).
-- Health / financial / authentication info: **No.**
-- Personal communications, location, web history: the extension stores, **only
-  on the device**, the website domains where words were seen (domain-only by
-  default; full-URL is an off-by-default opt-in). This is never transmitted.
-- Selling data / using it for purposes unrelated to core function / using it for
-  creditworthiness or lending: **No** to all (required certifications).
+> IMPORTANT: Google's User Data FAQ (Q3) says you must disclose data the
+> extension **handles even if it is only processed/stored locally** and never
+> transmitted. So "fully offline" does NOT mean "disclose nothing." Disclose to
+> match the privacy policy + actual behavior — inconsistencies can get a
+> publisher suspended.
+
+**"What user data do you plan to collect?" — check these two:**
+
+- ✅ **Website content** — the content script reads the visible page text to find
+  and gloss words (bundled dictionary, on-device).
+- ✅ **Web history** — the exposure log records the **website domain** (and the
+  full URL only if the user opts in) + a timestamp for pages where words are
+  glossed. That's a record of pages visited, so it maps to "Web history." The
+  privacy policy already discloses this, so this box must match.
+
+**Leave unchecked:** Personally identifiable info, Health, Financial/payment,
+Authentication, Personal communications, Location.
+
+- **User activity** — judgment call; leave **unchecked**. The only interactions
+  logged are clicking a gloss to mark a word "known" and grading review cards —
+  the mechanics of the extension's own features, not behavioral/clickstream
+  tracking. (Check it only if you want to over-disclose.)
+
+**Certify all three (required) — all TRUE for LearnWise:**
+
+- ✅ I do not sell or transfer user data to third parties (nothing is transmitted
+  at all in v1).
+- ✅ I do not use/transfer user data for purposes unrelated to the single purpose.
+- ✅ I do not use/transfer user data to determine creditworthiness or for lending.
+
+> Consistency note: none of this data is transmitted off-device — these
+> disclosures cover **local handling**, which Google still requires. This agrees
+> with the privacy policy (fully offline; discloses domain-only reading history).
 
 ## Privacy policy URL
 

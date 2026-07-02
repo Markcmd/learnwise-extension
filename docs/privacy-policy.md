@@ -64,9 +64,8 @@ policy will be updated to describe it in full before it ships.
 
 - **Read and change data on websites you visit (`<all_urls>` content script)** —
   required so LearnWise can find words on the page and show inline meanings. The
-  extension reads page text locally to do this; it does not send page content
-  anywhere except, in smart-translation mode, the single word/context sentence
-  described above.
+  extension reads page text locally to do this and does not send page content
+  anywhere.
 - **Storage / unlimited storage** — to keep your word bank, logs, and settings
   on your device. "Unlimited" storage is requested because a large vocabulary
   history can exceed the small default quota.
