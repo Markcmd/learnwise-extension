@@ -263,10 +263,39 @@ A Chrome extension (Manifest V3) that helps people learn English vocabulary whil
     listing (EN/中文) + privacy tabs; submit. Full write-up:
     `dev-notes/session-logs/2026-07-01-m4.4-package-submit.md`.
 
-## Next action: **M4.4 submit (manual) → then 4.5 Google review wait**. All build/asset prep for v1 is COMPLETE.
-Previously: **M4.4 — Package + submit (Chrome Web Store)** (see ESTIMATES.md → M4)
-**M3 is complete** — the product is feature-complete for v1. Launch milestone status: **4.1 privacy policy + in-app note — DONE**, **4.2 permission audit — DONE**, **4.3 store listing assets — DONE** (copy + shot-list + promo tiles; Mark still captures the 5 screenshots), **4.4 package + submit — NOT STARTED** (zip, register dev account, upload, fill listing/privacy forms, submit). Pre-submit carryovers: publish the 4.1 privacy policy on GitHub Pages; decide BYOK enable-vs-"coming soon" wording so the UI, policy, and listing copy agree. No more core feature work planned for v1; v2 (paid tier — accounts, cloud sync, managed translations) is a separate milestone-set, not to start until v1 has real users.
+## Current state: **v1 IS LIVE on the Chrome Web Store** (v1.0.13). M0–M4 all complete.
 
-> Tip to open a new build chat: "Read START_HERE.md, PLAN.md, DESIGN.md, ESTIMATES.md in this repo, then let's start M4 (launch prep)."
+**Next up: v2 backend — it now lives in its own repo, `learnwise-backend/` (same parent folder).**
+Its design doc, dev journal and progress are all there: **`learnwise-backend/dev-notes/`**
+(start at `dev-notes/INDEX.md`; the plan itself is `dev-notes/planning/BACKEND_PLAN.md`,
+written 2026-09-08, 中文). **Backend work does not touch this repo** — open a session with
+the `learnwise-backend` folder connected and everything is there.
+
+Scope decided: **accounts + user database + server-side translation proxy + Stripe billing**,
+so "smart translations" stops being BYOK (bring-your-own-key) and becomes "pay and it just works".
+Stack = **Supabase** (auth + Postgres + Edge Functions) + **Stripe**. Explicitly deferred:
+cross-device word-bank sync (same account foundation, add anytime), the IndexedDB word-bank
+migration (independent task, no dependency), and the shared translation cache / sense-vector
+disambiguation scheme (recorded with its data in the backend plan's **Appendix A** — revisit when
+the AI bill actually hurts).
+
+**Key decision (2026-09-08): no cost optimization for now — every lookup calls the API.**
+Get the commercial loop working first. But (a) hard monthly quotas from day one, and (b) keep
+the existing word-level cache (`Word.meaning`) short-circuit — it is free and already there.
+
+**Compliance warning:** v1 ships as "fully offline, no server". Adding a backend means rewriting
+the privacy policy, refilling the store's data-use disclosures, adding the `identity` permission
+and the Supabase host permission, and shipping an account-deletion path. Budget real time for it —
+see the backend plan's §7.
+
+### v2 进度
+
+后端的进度不在这份文档里 —— 看 **`learnwise-backend/dev-notes/INDEX.md`**
+和那边 `BACKEND_PLAN.md` §8 的进度块。
+截至 2026-09-18：B1 与 B2 的前两刀已上真实 Supabase 项目，第三刀（结算 · 退还 · 清扫）
+已写完待推送，§10 的 32 个验收场景数据库层跑通 19 个。
+
+> Tip to open a new backend chat: connect the `learnwise-backend` folder and say
+> "Read dev-notes/INDEX.md and §6.5 + §10 of dev-notes/planning/BACKEND_PLAN.md, then continue B2."
 
 > **Build note:** `dist/` has SIX bundles — `contentScript.js`, `background.js`, `onboarding.js`, `review.js`, `dashboard.js`. `dashboard.js` is the **stats renderer embedded in the combined `settingsWindow.html`** (there is no separate dashboard.html anymore). Settings/popup are unbundled classic scripts. Run `npm run build` after any change under `JSs/core`, `JSs/dom`, `contentScript.js`, `background.js`, `onboarding.js`, `review.js`, or `dashboard.js`.

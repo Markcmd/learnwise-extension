@@ -32,6 +32,9 @@ dev-notes/
 ## How to use
 
 - **Starting a new session?** Read `planning/START_HERE.md` first.
+- **Working on the v2 backend (accounts / paid tier)?** It has its own repo and its own
+  dev-notes: `learnwise-backend/dev-notes/` (start at its `INDEX.md`). Nothing about the
+  backend is kept here.
 - **Recording a decision?** Add to `decisions/` (or append to `DECISIONS.md` for UI tweaks).
 - **Investigating a bug?** Write it up in `problems/`.
 - **Journaling a work session?** New dated file in `session-logs/`.
