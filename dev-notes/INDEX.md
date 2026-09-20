@@ -57,3 +57,4 @@ dev-notes/
 - [2026-06-29 — M4.3: store listing assets (copy + shot-list + promo tiles)](session-logs/2026-06-29-m4.3-store-assets.md)
 - [2026-06-30 — Pre-launch code review (no blocking bugs; BYOK/perms reconciled)](problems/2026-06-30-pre-launch-review.md)
 - [2026-07-01 — M4.4: package script + submission checklist](session-logs/2026-07-01-m4.4-package-submit.md)
+- [2026-09-20 — v2 B1: email one-time-code sign-in (Account card, hidden behind FEATURE_ACCOUNTS)](session-logs/2026-09-20-v2-b1-email-code-login.md)

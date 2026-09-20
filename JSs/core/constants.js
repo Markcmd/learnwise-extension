@@ -29,6 +29,12 @@ export const STORAGE_KEYS = {
   ESTIMATED_VOCAB: "lw_estimated_vocab",
   /** Audio (M2.3): auto-play pronunciation when a review answer is revealed. */
   SPEECH_AUTOPLAY: "lw_speech_autoplay",
+  /**
+   * Account (v2, B1): the signed-in Supabase session
+   * { accessToken, refreshToken, expiresAt, user: { id, email } }.
+   * Read/written ONLY by the background worker (core/session.js); pages ask via MSG.AUTH_*.
+   */
+  AUTH_SESSION: "lw_auth_session",
 };
 
 /** Current data schema version. Bump + add a migration step when the shape changes. */
@@ -102,6 +108,11 @@ export const MSG = {
   DELETE_WORD: "lw_delete_word",
   /** M2.6: clear the entire word bank + event log. */
   CLEAR_WORDBANK: "lw_clear_wordbank",
+  /** Account (v2, B1): email one-time-code sign-in, handled in the background worker. */
+  AUTH_GET_STATE: "lw_auth_get_state",
+  AUTH_SEND_CODE: "lw_auth_send_code",
+  AUTH_VERIFY_CODE: "lw_auth_verify_code",
+  AUTH_SIGN_OUT: "lw_auth_sign_out",
 };
 
 /**

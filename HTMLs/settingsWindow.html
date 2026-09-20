@@ -141,6 +141,40 @@
       <div id="deckList" class="deck-list"></div>
     </section>
 
+    <!-- v2 B1: account (email one-time-code sign-in). Hidden until FEATURE_ACCOUNTS
+         in settingsWindow.js is true; during development open this page with ?accounts=1. -->
+    <section class="card" id="accountCard" hidden>
+      <h2>Account</h2>
+      <p class="desc">Optional. Sign in with your email to use smart translations. Your word bank still stays on this device.</p>
+
+      <div id="acctSignedOut">
+        <form id="acctEmailForm" class="acct-row" novalidate>
+          <input id="acctEmail" type="email" placeholder="you@example.com" autocomplete="email" spellcheck="false" required />
+          <button id="acctSendCode" class="btn-primary" type="submit">Email me a code</button>
+        </form>
+
+        <form id="acctCodeForm" novalidate hidden>
+          <p class="desc">We sent a sign-in code to <strong id="acctEmailShown"></strong>. Enter it below — it expires in a few minutes.</p>
+          <div class="acct-row">
+            <input id="acctCode" class="mono acct-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                   maxlength="12" placeholder="123456" spellcheck="false" required />
+            <button id="acctVerify" class="btn-primary" type="submit">Sign in</button>
+          </div>
+          <div class="acct-row acct-links">
+            <button id="acctResend" type="button">Resend code</button>
+            <button id="acctChangeEmail" type="button">Use a different email</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="acctSignedIn" hidden>
+        <p class="acct-who">Signed in as <strong id="acctWho"></strong></p>
+        <button id="acctSignOut" type="button">Sign out</button>
+      </div>
+
+      <div id="acctStatus" class="acct-status" role="status" aria-live="polite"></div>
+    </section>
+
     <!-- D-001: smart translations gated as "coming soon" -->
     <section class="card coming-soon-card">
       <div class="cs-row">

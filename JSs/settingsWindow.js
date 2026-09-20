@@ -14,6 +14,9 @@
 
 // ---- feature flags ----
 const FEATURE_BYOK = false; // D-001 — smart translations hidden for now.
+// v2 B1 — account sign-in card. Off until the v2 backend ships (the live v1
+// promises "no server"). During development open the page with ?accounts=1.
+const FEATURE_ACCOUNTS = false;
 
 // ---- storage keys (mirror core/constants.js STORAGE_KEYS) ----
 const KEYS = {
@@ -22,6 +25,13 @@ const KEYS = {
 const MSG_DEMOTE_WORD = "lw_demote_word"; // mirror core/constants.js MSG.DEMOTE_WORD
 const MSG_DELETE_WORD = "lw_delete_word"; // mirror core/constants.js MSG.DELETE_WORD
 const MSG_CLEAR_WORDBANK = "lw_clear_wordbank"; // mirror core/constants.js MSG.CLEAR_WORDBANK
+// Account messages — mirror core/constants.js MSG.AUTH_* (handled in background.js).
+const MSG_AUTH = {
+  GET_STATE: "lw_auth_get_state",
+  SEND_CODE: "lw_auth_send_code",
+  VERIFY_CODE: "lw_auth_verify_code",
+  SIGN_OUT: "lw_auth_sign_out",
+};
 const STOP_GLOSS_LEVEL = 90; // mirror core/constants.js
 // Familiarity tiers — mirror of core/constants.js FAMILIARITY_TIERS (single
 // source of truth). This page is an unbundled classic script so it can't import;
@@ -696,6 +706,187 @@ async function setTheme(theme) {
 }
 
 // =====================================================================
+// Account (v2 B1): email one-time-code sign-in
+// ---------------------------------------------------------------------
+// This page never sees tokens. It sends the email / code to the
+// background worker, which talks to Supabase Auth and keeps the session
+// (core/session.js). Replies are { ok, data } or { ok:false, error:{kind} }.
+// =====================================================================
+const RESEND_COOLDOWN_SEC = 60;
+let acctEmail = null; // the address the current code was sent to
+let acctCooldownTimer = null;
+
+const AUTH_ERROR_TEXT = {
+  not_configured: "Sign-in isn't set up in this build yet (missing Supabase key).",
+  invalid_email: "That doesn't look like an email address.",
+  invalid_code: "That code is wrong or has expired. Check the latest email, or resend.",
+  rate_limited: "Too many attempts. Please wait a moment and try again.",
+  signup_disabled: "New sign-ups are closed right now.",
+  session_expired: "Your session expired. Please sign in again.",
+  network: "Can't reach the server. Check your connection and try again.",
+  server: "The server had a problem. Please try again in a minute.",
+  forbidden: "This action isn't allowed from here.",
+  unknown: "Something went wrong. Please try again.",
+};
+
+function accountsEnabled() {
+  if (FEATURE_ACCOUNTS) return true;
+  try {
+    return new URLSearchParams(location.search).get("accounts") === "1";
+  } catch (_e) {
+    return false;
+  }
+}
+
+function authCall(type, payload) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ type, ...(payload || {}) }, (resp) => {
+        if (chrome.runtime.lastError || !resp) {
+          resolve({ ok: false, error: { kind: "unknown" } });
+        } else {
+          resolve(resp);
+        }
+      });
+    } catch (_e) {
+      resolve({ ok: false, error: { kind: "unknown" } });
+    }
+  });
+}
+
+function acctStatus(text, isError) {
+  const el = $("acctStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.classList.toggle("is-error", !!isError);
+}
+
+function acctErrorText(error) {
+  const base = AUTH_ERROR_TEXT[error?.kind] || AUTH_ERROR_TEXT.unknown;
+  if (error?.kind === "rate_limited" && error.retryAfterSec) {
+    return `Too many attempts. Try again in ${error.retryAfterSec} seconds.`;
+  }
+  return base;
+}
+
+function acctBusy(busy) {
+  for (const id of ["acctSendCode", "acctVerify", "acctResend", "acctChangeEmail", "acctSignOut"]) {
+    const b = $(id);
+    if (b) b.disabled = !!busy;
+  }
+}
+
+function acctShow(view) {
+  $("acctSignedOut").hidden = view === "signedIn";
+  $("acctSignedIn").hidden = view !== "signedIn";
+  $("acctEmailForm").hidden = view !== "email";
+  $("acctCodeForm").hidden = view !== "code";
+}
+
+function acctStartCooldown(seconds) {
+  const btn = $("acctResend");
+  if (!btn) return;
+  clearInterval(acctCooldownTimer);
+  let left = seconds;
+  const tick = () => {
+    if (left <= 0) {
+      clearInterval(acctCooldownTimer);
+      btn.disabled = false;
+      btn.textContent = "Resend code";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = `Resend code (${left}s)`;
+    left -= 1;
+  };
+  tick();
+  acctCooldownTimer = setInterval(tick, 1000);
+}
+
+async function acctRender() {
+  const r = await authCall(MSG_AUTH.GET_STATE);
+  if (r.ok && r.data?.signedIn) {
+    $("acctWho").textContent = r.data.email || "(no email)";
+    acctShow("signedIn");
+  } else {
+    acctShow(acctEmail ? "code" : "email");
+  }
+}
+
+async function acctSendCode(email) {
+  acctBusy(true);
+  acctStatus("Sending…");
+  const r = await authCall(MSG_AUTH.SEND_CODE, { email });
+  acctBusy(false);
+  if (!r.ok) {
+    acctStatus(acctErrorText(r.error), true);
+    if (r.error?.kind === "rate_limited" && acctEmail) acctStartCooldown(r.error.retryAfterSec || RESEND_COOLDOWN_SEC);
+    return;
+  }
+  acctEmail = r.data?.email || email;
+  $("acctEmailShown").textContent = acctEmail;
+  $("acctCode").value = "";
+  acctShow("code");
+  acctStatus("Code sent. It can take a minute to arrive — check spam too.");
+  acctStartCooldown(RESEND_COOLDOWN_SEC);
+  $("acctCode").focus();
+}
+
+async function acctVerify(code) {
+  acctBusy(true);
+  acctStatus("Signing in…");
+  const r = await authCall(MSG_AUTH.VERIFY_CODE, { email: acctEmail, code });
+  acctBusy(false);
+  if (!r.ok) {
+    acctStatus(acctErrorText(r.error), true);
+    return;
+  }
+  acctEmail = null;
+  clearInterval(acctCooldownTimer);
+  acctStatus("");
+  await acctRender();
+}
+
+async function acctSignOut() {
+  acctBusy(true);
+  await authCall(MSG_AUTH.SIGN_OUT);
+  acctBusy(false);
+  acctEmail = null;
+  acctStatus("Signed out.");
+  await acctRender();
+}
+
+function initAccount() {
+  const card = $("accountCard");
+  if (!card || !accountsEnabled()) return;
+  card.hidden = false;
+
+  $("acctEmailForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = $("acctEmail").value.trim();
+    if (!email) return acctStatus(AUTH_ERROR_TEXT.invalid_email, true);
+    acctSendCode(email);
+  });
+  $("acctCodeForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = $("acctCode").value.replace(/[\s-]/g, "");
+    if (!/^\d{6,10}$/.test(code)) return acctStatus("Enter the 6-digit code from the email.", true);
+    acctVerify(code);
+  });
+  $("acctResend").addEventListener("click", () => acctEmail && acctSendCode(acctEmail));
+  $("acctChangeEmail").addEventListener("click", () => {
+    acctEmail = null;
+    clearInterval(acctCooldownTimer);
+    acctStatus("");
+    acctShow("email");
+    $("acctEmail").focus();
+  });
+  $("acctSignOut").addEventListener("click", acctSignOut);
+
+  acctRender();
+}
+
+// =====================================================================
 // App entry
 // =====================================================================
 function init() {
@@ -724,6 +915,8 @@ function init() {
   } catch (_e) {
     /* no-op */
   }
+
+  initAccount();
 
   // Load the frequency rank list (for difficulty decks) before first render.
   loadRankIndex().then(refresh, refresh);

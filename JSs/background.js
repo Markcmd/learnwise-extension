@@ -15,6 +15,9 @@ import { fetchByokTranslations, LlmError } from "./dom/llm.js";
 import { getWordBank, setWordBank, demoteWord, deleteWord } from "./core/wordbank.js";
 import { deleteEventsForWord } from "./core/events.js";
 import { clearStore } from "./core/idb.js";
+import { createAuthClient, AuthError } from "./core/authClient.js";
+import { createSessionManager } from "./core/session.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./core/authConfig.js";
 
 async function ensureDefaults() {
   const res = await getLocal([
@@ -161,6 +164,55 @@ async function handleClearWordBank() {
   }
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------
+// Account (v2, B1): email one-time-code sign-in
+// ---------------------------------------------------------------------
+// Tokens live only here (chrome.storage.local via core/session.js); the
+// settings page gets { signedIn, email } and nothing else. Later, the
+// managed-translation call (B3) gets its bearer token from
+// auth.getAccessToken(), which refreshes it when needed.
+const auth = createSessionManager({
+  client: createAuthClient({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY }),
+});
+
+function authErrorResponse(e) {
+  return {
+    ok: false,
+    error:
+      e instanceof AuthError
+        ? { kind: e.kind, retryAfterSec: e.retryAfterSec ?? null }
+        : { kind: "unknown", retryAfterSec: null },
+  };
+}
+
+// Only our own extension pages may drive sign-in (content scripts run on
+// arbitrary websites and have no business here).
+function fromExtensionPage(sender) {
+  return !sender?.tab || String(sender?.url || "").startsWith(chrome.runtime.getURL(""));
+}
+
+const AUTH_HANDLERS = {
+  [MSG.AUTH_GET_STATE]: () => auth.getState(),
+  [MSG.AUTH_SEND_CODE]: (msg) => auth.sendCode(msg?.email),
+  [MSG.AUTH_VERIFY_CODE]: (msg) => auth.signInWithCode(msg?.email, msg?.code),
+  [MSG.AUTH_SIGN_OUT]: () => auth.signOut(),
+};
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const authHandler = AUTH_HANDLERS[msg?.type];
+  if (authHandler) {
+    if (!fromExtensionPage(sender)) {
+      sendResponse({ ok: false, error: { kind: "forbidden", retryAfterSec: null } });
+      return false;
+    }
+    Promise.resolve()
+      .then(() => authHandler(msg))
+      .then((data) => sendResponse({ ok: true, data }), (e) => sendResponse(authErrorResponse(e)));
+    return true;
+  }
+  return false;
+});
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === MSG.TRANSLATE_BYOK) {
