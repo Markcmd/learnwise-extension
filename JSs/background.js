@@ -166,10 +166,11 @@ async function handleClearWordBank() {
 }
 
 // ---------------------------------------------------------------------
-// Account (v2, B1): email one-time-code sign-in
+// Account (v2, B1): email + password sign-in (confirmation link on sign-up)
 // ---------------------------------------------------------------------
 // Tokens live only here (chrome.storage.local via core/session.js); the
-// settings page gets { signedIn, email } and nothing else. Later, the
+// settings page gets { signedIn, email } and nothing else. The password
+// passes through this worker to Supabase once and is never stored. Later, the
 // managed-translation call (B3) gets its bearer token from
 // auth.getAccessToken(), which refreshes it when needed.
 const auth = createSessionManager({
@@ -194,8 +195,9 @@ function fromExtensionPage(sender) {
 
 const AUTH_HANDLERS = {
   [MSG.AUTH_GET_STATE]: () => auth.getState(),
-  [MSG.AUTH_SEND_CODE]: (msg) => auth.sendCode(msg?.email),
-  [MSG.AUTH_VERIFY_CODE]: (msg) => auth.signInWithCode(msg?.email, msg?.code),
+  [MSG.AUTH_SIGN_UP]: (msg) => auth.signUp(msg?.email, msg?.password),
+  [MSG.AUTH_SIGN_IN]: (msg) => auth.signIn(msg?.email, msg?.password),
+  [MSG.AUTH_RESEND_CONFIRMATION]: (msg) => auth.resendConfirmation(msg?.email),
   [MSG.AUTH_SIGN_OUT]: () => auth.signOut(),
 };
 

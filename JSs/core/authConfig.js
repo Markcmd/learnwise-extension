@@ -12,4 +12,4 @@
 // "not configured" instead of failing mysteriously.
 // =====================================================================
 export const SUPABASE_URL = "https://jnhlfsgnbskagurrldad.supabase.co";
-export const SUPABASE_ANON_KEY = "";
+export const SUPABASE_ANON_KEY = "sb_publishable_5om_kXyQJUE9dGTD8KJY6g_gIApbdvg";

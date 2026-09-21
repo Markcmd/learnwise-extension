@@ -1,17 +1,17 @@
 // =====================================================================
-// Auth client — email one-time-code sign-in against Supabase Auth
+// Auth client — email + password sign-in against Supabase Auth
 // ---------------------------------------------------------------------
 // Talks to the Supabase Auth REST endpoints directly with fetch() — no
 // supabase-js dependency (smaller bundle, no remote code, nothing new in
 // the service worker but a few HTTP calls).
 //
-// Why a CODE and not a magic LINK: a link opens in the user's mail client
-// / a normal tab, outside the extension, and would need a redirect back
-// into the extension (chrome.identity + a chromiumapp.org callback). A
-// 6-digit code is typed straight into the settings page, needs no redirect
-// and no extra permission, and still proves the user owns the inbox —
-// which is the whole point (see learnwise-backend decision 2026-09-20:
-// trials are only issued once the email is confirmed).
+// Flow (decision 2026-09-21): create an account with email + password →
+// Supabase emails a confirmation LINK → the user clicks it once → from
+// then on they sign in with email + password. Until the link is clicked,
+// sign-in is refused ("email not confirmed") and — on the backend — no
+// trial is issued (learnwise-backend, B2 cut 7). No redirect back into
+// the extension is needed: clicking the link only has to confirm the
+// address, the extension then signs in with the password.
 //
 // Pure except for the injected `fetchImpl`, so it is unit-testable in Node.
 // =====================================================================
@@ -20,7 +20,9 @@
 export const AUTH_ERROR = {
   NOT_CONFIGURED: "not_configured",
   INVALID_EMAIL: "invalid_email",
-  INVALID_CODE: "invalid_code", // wrong or expired — Supabase does not tell them apart
+  WEAK_PASSWORD: "weak_password",
+  INVALID_CREDENTIALS: "invalid_credentials", // wrong email or password (Supabase won't say which)
+  EMAIL_NOT_CONFIRMED: "email_not_confirmed", // the confirmation link hasn't been clicked yet
   RATE_LIMITED: "rate_limited",
   SIGNUP_DISABLED: "signup_disabled",
   SESSION_EXPIRED: "session_expired", // refresh token rejected → must sign in again
@@ -48,6 +50,9 @@ export class AuthError extends Error {
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+/** Client-side minimum. Set the same (or lower) in Supabase → Auth → password settings. */
+export const MIN_PASSWORD_LENGTH = 8;
+
 // Deliberately loose: the server is the real validator. This only catches
 // obvious typos before we spend one of the (rate-limited) emails.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,10 +63,10 @@ export function normalizeEmailInput(raw) {
   return EMAIL_RE.test(s) && s.length <= 254 ? s : null;
 }
 
-/** Strip spaces/dashes from a pasted code; null unless 6–10 digits. */
-export function normalizeCodeInput(raw) {
-  const s = String(raw ?? "").replace(/[\s-]/g, "");
-  return /^\d{6,10}$/.test(s) ? s : null;
+/** Passwords are used exactly as typed (no trimming). */
+export function checkPassword(raw) {
+  const s = typeof raw === "string" ? raw : "";
+  return s.length >= MIN_PASSWORD_LENGTH && s.length <= 72; // 72 = bcrypt's limit
 }
 
 /**
@@ -106,13 +111,19 @@ export function classifyAuthError(status, body, context) {
     // session_not_found, session_expired … all mean "sign in again".
     return new AuthError(AUTH_ERROR.SESSION_EXPIRED, msg || code || "refresh rejected", extra);
   }
-  if (code === "otp_expired" || (context === "verify" && (status === 400 || status === 401 || status === 403))) {
-    return new AuthError(AUTH_ERROR.INVALID_CODE, msg || "invalid or expired code", extra);
+  if (code === "email_not_confirmed" || /email not confirmed/i.test(msg)) {
+    return new AuthError(AUTH_ERROR.EMAIL_NOT_CONFIRMED, msg || "email not confirmed", extra);
+  }
+  if (code === "weak_password" || /password should be|password is too weak/i.test(msg)) {
+    return new AuthError(AUTH_ERROR.WEAK_PASSWORD, msg || "weak password", extra);
+  }
+  if (code === "invalid_credentials" || (context === "password" && code === "invalid_grant")) {
+    return new AuthError(AUTH_ERROR.INVALID_CREDENTIALS, msg || "invalid login credentials", extra);
   }
   if (code === "email_address_invalid" || code === "validation_failed" || /invalid.*email|email.*invalid/i.test(msg)) {
     return new AuthError(AUTH_ERROR.INVALID_EMAIL, msg || "invalid email", extra);
   }
-  if (code === "signup_disabled" || code === "otp_disabled" || /signups? not allowed/i.test(msg)) {
+  if (code === "signup_disabled" || code === "email_provider_disabled" || /signups? not allowed/i.test(msg)) {
     return new AuthError(AUTH_ERROR.SIGNUP_DISABLED, msg || "sign-up disabled", extra);
   }
   if (status >= 500) return new AuthError(AUTH_ERROR.SERVER, msg || `HTTP ${status}`, extra);
@@ -166,23 +177,45 @@ export function createAuthClient({ url, anonKey, fetchImpl, now = Date.now, time
     return json;
   }
 
+  function requireEmail(rawEmail) {
+    const email = normalizeEmailInput(rawEmail);
+    if (!email) throw new AuthError(AUTH_ERROR.INVALID_EMAIL, "not an email address");
+    return email;
+  }
+
   return {
-    /** Ask Supabase to email a one-time code. Creates the account on first use. */
-    async sendEmailCode(rawEmail) {
-      const email = normalizeEmailInput(rawEmail);
-      if (!email) throw new AuthError(AUTH_ERROR.INVALID_EMAIL, "not an email address");
-      await call("/auth/v1/otp", { body: { email, create_user: true }, context: "otp" });
-      return { email };
+    /**
+     * Create an account. With "Confirm email" on (as it must be in
+     * production) Supabase returns no session and emails a confirmation
+     * link. If the address already has an account, Supabase deliberately
+     * answers the same way (so nobody can probe which emails are
+     * registered) — the UI just says "check your inbox, or sign in".
+     * @returns {{email:string, session: object|null}}
+     */
+    async signUp(rawEmail, password) {
+      const email = requireEmail(rawEmail);
+      if (!checkPassword(password)) throw new AuthError(AUTH_ERROR.WEAK_PASSWORD, `password must be ${MIN_PASSWORD_LENGTH}+ characters`);
+      const json = await call("/auth/v1/signup", { body: { email, password }, context: "signup" });
+      // Only if confirmations were turned OFF would a session come back here.
+      const session = json?.access_token ? toSession(json, now()) : null;
+      return { email, session };
     },
 
-    /** Exchange the emailed code for a session. This is what confirms the email. */
-    async verifyEmailCode(rawEmail, rawCode) {
-      const email = normalizeEmailInput(rawEmail);
-      if (!email) throw new AuthError(AUTH_ERROR.INVALID_EMAIL, "not an email address");
-      const token = normalizeCodeInput(rawCode);
-      if (!token) throw new AuthError(AUTH_ERROR.INVALID_CODE, "code must be 6–10 digits");
-      const json = await call("/auth/v1/verify", { body: { type: "email", email, token }, context: "verify" });
+    /** Email + password → session. Refused until the confirmation link has been clicked. */
+    async signIn(rawEmail, password) {
+      const email = requireEmail(rawEmail);
+      if (typeof password !== "string" || !password) {
+        throw new AuthError(AUTH_ERROR.INVALID_CREDENTIALS, "empty password");
+      }
+      const json = await call("/auth/v1/token?grant_type=password", { body: { email, password }, context: "password" });
       return toSession(json, now());
+    },
+
+    /** Send the confirmation email again (it expires, or lands in spam). */
+    async resendConfirmation(rawEmail) {
+      const email = requireEmail(rawEmail);
+      await call("/auth/v1/resend", { body: { type: "signup", email }, context: "resend" });
+      return { email };
     },
 
     /** Trade a refresh token for a fresh session (refresh tokens rotate). */

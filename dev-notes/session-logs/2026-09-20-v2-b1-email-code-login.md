@@ -1,4 +1,28 @@
-# 2026-09-20 — v2 B1：扩展端邮箱验证码登录
+# 2026-09-20 / 09-21 — v2 B1：扩展端登录（最终版：邮箱 + 密码 + 注册确认链接）
+
+## ⚠️ 2026-09-21 更新：验证码方案已替换为"邮箱 + 密码"
+
+Mark 决定不用验证码。现在的流程：**Create account（邮箱 + 密码）→ Supabase 发确认邮件 → 用户点一次链接 →
+之后用邮箱 + 密码登录**。点链接之前登录被拒（`email_not_confirmed`），后端也不发试用。
+
+| 变化 | 说明 |
+|---|---|
+| `core/authClient.js` | `signUp`（`/auth/v1/signup`）、`signIn`（`/auth/v1/token?grant_type=password`）、`resendConfirmation`（`/auth/v1/resend`）；删掉发码 / 验码 |
+| `core/session.js` | `signUp` / `signIn` / `resendConfirmation`；刷新、登出规则不变 |
+| `MSG.AUTH_*` | `AUTH_SIGN_UP` / `AUTH_SIGN_IN` / `AUTH_RESEND_CONFIRMATION`（替换 `AUTH_SEND_CODE` / `AUTH_VERIFY_CODE`）|
+| 设置页 | 邮箱 + 密码两个输入框，"Sign in" / "Create account"；注册后显示"去邮箱点确认链接"+ 重发 |
+| 密码 | 至少 8 位、最多 72 位（bcrypt 上限），原样使用不去空格；**只经过后台发给 Supabase 一次，从不存储**（测试里查了整个 storage）|
+| Supabase 对"已注册的邮箱再注册"返回和新注册一样的结果（防止被人试探谁注册过）| 界面因此写"去邮箱确认；已有账号直接登录" |
+
+验证：`vitest` 22 个文件 / 218 个测试通过（auth 27 个）；`npm run build` 通过；`tools/e2e_login.py` 真浏览器 21 项通过
+（假 Supabase 按"确认邮箱打开"的行为模拟：注册 → 未确认登录被拒 → 点链接 → 登录成功 → 刷新仍登录 → 登出）。
+
+还没做：**忘记密码**（需要一个重置密码的网页）；填 anon key；Supabase 控制台打开 `Confirm email`、设 Site URL。
+
+下面是 09-20 验证码版的原始记录，决策 1 已作废，其余（不引入 supabase-js、不加权限、令牌只在后台、刷新三规则、卡片默认隐藏）仍然成立。
+
+---
+
 
 后端计划在 `learnwise-backend/dev-notes/planning/BACKEND_PLAN.md`（§8 B1）。本文件只记扩展这一侧。
 

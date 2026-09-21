@@ -28,8 +28,9 @@ const MSG_CLEAR_WORDBANK = "lw_clear_wordbank"; // mirror core/constants.js MSG.
 // Account messages — mirror core/constants.js MSG.AUTH_* (handled in background.js).
 const MSG_AUTH = {
   GET_STATE: "lw_auth_get_state",
-  SEND_CODE: "lw_auth_send_code",
-  VERIFY_CODE: "lw_auth_verify_code",
+  SIGN_UP: "lw_auth_sign_up",
+  SIGN_IN: "lw_auth_sign_in",
+  RESEND_CONFIRMATION: "lw_auth_resend_confirmation",
   SIGN_OUT: "lw_auth_sign_out",
 };
 const STOP_GLOSS_LEVEL = 90; // mirror core/constants.js
@@ -706,20 +707,23 @@ async function setTheme(theme) {
 }
 
 // =====================================================================
-// Account (v2 B1): email one-time-code sign-in
+// Account (v2 B1): email + password sign-in
 // ---------------------------------------------------------------------
-// This page never sees tokens. It sends the email / code to the
-// background worker, which talks to Supabase Auth and keeps the session
-// (core/session.js). Replies are { ok, data } or { ok:false, error:{kind} }.
+// Create account → Supabase emails a confirmation link → user clicks it
+// once → signs in with email + password from then on. This page never sees
+// tokens: it hands email/password to the background worker (which talks to
+// Supabase and keeps the session, core/session.js) and gets back
+// { ok, data } or { ok:false, error:{kind} }. The password is not stored.
 // =====================================================================
-const RESEND_COOLDOWN_SEC = 60;
-let acctEmail = null; // the address the current code was sent to
-let acctCooldownTimer = null;
+const MIN_PASSWORD_LENGTH = 8; // mirror core/authClient.js
+let acctPendingEmail = null; // address a confirmation link was just sent to
 
 const AUTH_ERROR_TEXT = {
   not_configured: "Sign-in isn't set up in this build yet (missing Supabase key).",
   invalid_email: "That doesn't look like an email address.",
-  invalid_code: "That code is wrong or has expired. Check the latest email, or resend.",
+  weak_password: `Please use a password with at least ${MIN_PASSWORD_LENGTH} characters.`,
+  invalid_credentials: "Wrong email or password.",
+  email_not_confirmed: "Please confirm your email first — click the link we sent you.",
   rate_limited: "Too many attempts. Please wait a moment and try again.",
   signup_disabled: "New sign-ups are closed right now.",
   session_expired: "Your session expired. Please sign in again.",
@@ -762,45 +766,27 @@ function acctStatus(text, isError) {
 }
 
 function acctErrorText(error) {
-  const base = AUTH_ERROR_TEXT[error?.kind] || AUTH_ERROR_TEXT.unknown;
   if (error?.kind === "rate_limited" && error.retryAfterSec) {
     return `Too many attempts. Try again in ${error.retryAfterSec} seconds.`;
   }
-  return base;
+  return AUTH_ERROR_TEXT[error?.kind] || AUTH_ERROR_TEXT.unknown;
 }
 
 function acctBusy(busy) {
-  for (const id of ["acctSendCode", "acctVerify", "acctResend", "acctChangeEmail", "acctSignOut"]) {
+  for (const id of ["acctSignIn", "acctSignUp", "acctResend", "acctBackToSignIn", "acctSignOut"]) {
     const b = $(id);
     if (b) b.disabled = !!busy;
   }
 }
 
 function acctShow(view) {
-  $("acctSignedOut").hidden = view === "signedIn";
+  $("acctForm").hidden = view !== "form";
+  $("acctConfirm").hidden = view !== "confirm";
   $("acctSignedIn").hidden = view !== "signedIn";
-  $("acctEmailForm").hidden = view !== "email";
-  $("acctCodeForm").hidden = view !== "code";
 }
 
-function acctStartCooldown(seconds) {
-  const btn = $("acctResend");
-  if (!btn) return;
-  clearInterval(acctCooldownTimer);
-  let left = seconds;
-  const tick = () => {
-    if (left <= 0) {
-      clearInterval(acctCooldownTimer);
-      btn.disabled = false;
-      btn.textContent = "Resend code";
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = `Resend code (${left}s)`;
-    left -= 1;
-  };
-  tick();
-  acctCooldownTimer = setInterval(tick, 1000);
+function acctInputs() {
+  return { email: $("acctEmail").value.trim(), password: $("acctPassword").value };
 }
 
 async function acctRender() {
@@ -809,49 +795,66 @@ async function acctRender() {
     $("acctWho").textContent = r.data.email || "(no email)";
     acctShow("signedIn");
   } else {
-    acctShow(acctEmail ? "code" : "email");
+    acctShow("form");
   }
 }
 
-async function acctSendCode(email) {
-  acctBusy(true);
-  acctStatus("Sending…");
-  const r = await authCall(MSG_AUTH.SEND_CODE, { email });
-  acctBusy(false);
-  if (!r.ok) {
-    acctStatus(acctErrorText(r.error), true);
-    if (r.error?.kind === "rate_limited" && acctEmail) acctStartCooldown(r.error.retryAfterSec || RESEND_COOLDOWN_SEC);
-    return;
-  }
-  acctEmail = r.data?.email || email;
-  $("acctEmailShown").textContent = acctEmail;
-  $("acctCode").value = "";
-  acctShow("code");
-  acctStatus("Code sent. It can take a minute to arrive — check spam too.");
-  acctStartCooldown(RESEND_COOLDOWN_SEC);
-  $("acctCode").focus();
-}
-
-async function acctVerify(code) {
+async function acctSignIn() {
+  const { email, password } = acctInputs();
+  if (!email) return acctStatus(AUTH_ERROR_TEXT.invalid_email, true);
+  if (!password) return acctStatus("Enter your password.", true);
   acctBusy(true);
   acctStatus("Signing in…");
-  const r = await authCall(MSG_AUTH.VERIFY_CODE, { email: acctEmail, code });
+  const r = await authCall(MSG_AUTH.SIGN_IN, { email, password });
   acctBusy(false);
   if (!r.ok) {
-    acctStatus(acctErrorText(r.error), true);
-    return;
+    if (r.error?.kind === "email_not_confirmed") {
+      acctPendingEmail = email;
+      $("acctConfirmEmail").textContent = email;
+      acctShow("confirm");
+    }
+    return acctStatus(acctErrorText(r.error), true);
   }
-  acctEmail = null;
-  clearInterval(acctCooldownTimer);
+  $("acctPassword").value = "";
+  acctPendingEmail = null;
   acctStatus("");
   await acctRender();
+}
+
+async function acctSignUp() {
+  const { email, password } = acctInputs();
+  if (!email) return acctStatus(AUTH_ERROR_TEXT.invalid_email, true);
+  if (password.length < MIN_PASSWORD_LENGTH) return acctStatus(AUTH_ERROR_TEXT.weak_password, true);
+  acctBusy(true);
+  acctStatus("Creating your account…");
+  const r = await authCall(MSG_AUTH.SIGN_UP, { email, password });
+  acctBusy(false);
+  if (!r.ok) return acctStatus(acctErrorText(r.error), true);
+  if (r.data?.signedIn) {
+    $("acctPassword").value = "";
+    acctStatus("");
+    return acctRender();
+  }
+  acctPendingEmail = r.data?.email || email;
+  $("acctConfirmEmail").textContent = acctPendingEmail;
+  acctShow("confirm");
+  // Supabase answers the same way for an address that already has an account
+  // (so nobody can probe who is registered) — hence the "or sign in" hint.
+  acctStatus("Check your inbox (and spam). Already have an account? Just sign in.");
+}
+
+async function acctResend() {
+  if (!acctPendingEmail) return;
+  acctBusy(true);
+  const r = await authCall(MSG_AUTH.RESEND_CONFIRMATION, { email: acctPendingEmail });
+  acctBusy(false);
+  acctStatus(r.ok ? "Sent again. It can take a minute to arrive." : acctErrorText(r.error), !r.ok);
 }
 
 async function acctSignOut() {
   acctBusy(true);
   await authCall(MSG_AUTH.SIGN_OUT);
   acctBusy(false);
-  acctEmail = null;
   acctStatus("Signed out.");
   await acctRender();
 }
@@ -861,25 +864,17 @@ function initAccount() {
   if (!card || !accountsEnabled()) return;
   card.hidden = false;
 
-  $("acctEmailForm").addEventListener("submit", (e) => {
+  $("acctForm").addEventListener("submit", (e) => {
     e.preventDefault();
-    const email = $("acctEmail").value.trim();
-    if (!email) return acctStatus(AUTH_ERROR_TEXT.invalid_email, true);
-    acctSendCode(email);
+    acctSignIn();
   });
-  $("acctCodeForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const code = $("acctCode").value.replace(/[\s-]/g, "");
-    if (!/^\d{6,10}$/.test(code)) return acctStatus("Enter the 6-digit code from the email.", true);
-    acctVerify(code);
-  });
-  $("acctResend").addEventListener("click", () => acctEmail && acctSendCode(acctEmail));
-  $("acctChangeEmail").addEventListener("click", () => {
-    acctEmail = null;
-    clearInterval(acctCooldownTimer);
+  $("acctSignUp").addEventListener("click", acctSignUp);
+  $("acctResend").addEventListener("click", acctResend);
+  $("acctBackToSignIn").addEventListener("click", () => {
     acctStatus("");
-    acctShow("email");
-    $("acctEmail").focus();
+    acctShow("form");
+    if (acctPendingEmail) $("acctEmail").value = acctPendingEmail;
+    $("acctPassword").focus();
   });
   $("acctSignOut").addEventListener("click", acctSignOut);
 

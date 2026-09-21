@@ -1,5 +1,6 @@
 // =====================================================================
-// Auth: email one-time-code sign-in + session refresh (B1, 2026-09-20)
+// Auth: email + password sign-in (confirm-link on sign-up) + session refresh
+// (B1 — 2026-09-20, switched from one-time codes to passwords 2026-09-21)
 // ---------------------------------------------------------------------
 // No network: fetch is a scripted fake. chrome.storage.local is the
 // in-memory fake from tests/setup.js.
@@ -9,7 +10,8 @@ import {
   createAuthClient,
   classifyAuthError,
   normalizeEmailInput,
-  normalizeCodeInput,
+  checkPassword,
+  MIN_PASSWORD_LENGTH,
   AUTH_ERROR,
   AuthError,
 } from "../JSs/core/authClient.js";
@@ -51,19 +53,22 @@ async function storedSession() {
   return r[STORAGE_KEYS.AUTH_SESSION];
 }
 
-describe("input normalization", () => {
+const PW = "correct horse";
+
+describe("input checks", () => {
   it("normalizes emails and rejects non-emails", () => {
     expect(normalizeEmailInput("  Mark@Example.COM ")).toBe("mark@example.com");
     expect(normalizeEmailInput("not-an-email")).toBeNull();
     expect(normalizeEmailInput("a b@c.com")).toBeNull();
     expect(normalizeEmailInput("")).toBeNull();
   });
-  it("accepts 6–10 digit codes, tolerating spaces and dashes", () => {
-    expect(normalizeCodeInput(" 123 456 ")).toBe("123456");
-    expect(normalizeCodeInput("123-456")).toBe("123456");
-    expect(normalizeCodeInput("12345")).toBeNull();
-    expect(normalizeCodeInput("abcdef")).toBeNull();
-    expect(normalizeCodeInput("12345678901")).toBeNull();
+  it("passwords: at least MIN_PASSWORD_LENGTH, at most 72, used as typed", () => {
+    expect(MIN_PASSWORD_LENGTH).toBe(8);
+    expect(checkPassword("1234567")).toBe(false);
+    expect(checkPassword("12345678")).toBe(true);
+    expect(checkPassword(" spaces count ")).toBe(true);
+    expect(checkPassword("x".repeat(73))).toBe(false);
+    expect(checkPassword(undefined)).toBe(false);
   });
 });
 
@@ -73,8 +78,12 @@ describe("classifyAuthError", () => {
     expect(e.kind).toBe(AUTH_ERROR.RATE_LIMITED);
     expect(e.retryAfterSec).toBe(42);
   });
-  it("wrong or expired code", () => {
-    expect(classifyAuthError(403, { error_code: "otp_expired", msg: "Token has expired or is invalid" }, "verify").kind).toBe(AUTH_ERROR.INVALID_CODE);
+  it("wrong password, unconfirmed email, weak password (both body shapes)", () => {
+    expect(classifyAuthError(400, { error_code: "invalid_credentials", msg: "Invalid login credentials" }, "password").kind).toBe(AUTH_ERROR.INVALID_CREDENTIALS);
+    expect(classifyAuthError(400, { error: "invalid_grant", error_description: "Invalid login credentials" }, "password").kind).toBe(AUTH_ERROR.INVALID_CREDENTIALS);
+    expect(classifyAuthError(400, { error_code: "email_not_confirmed", msg: "Email not confirmed" }, "password").kind).toBe(AUTH_ERROR.EMAIL_NOT_CONFIRMED);
+    expect(classifyAuthError(400, { error: "invalid_grant", error_description: "Email not confirmed" }, "password").kind).toBe(AUTH_ERROR.EMAIL_NOT_CONFIRMED);
+    expect(classifyAuthError(422, { error_code: "weak_password", msg: "Password should be at least 8 characters." }, "signup").kind).toBe(AUTH_ERROR.WEAK_PASSWORD);
   });
   it("rejected refresh token → session expired (both body shapes)", () => {
     expect(classifyAuthError(400, { error: "invalid_grant", error_description: "Invalid Refresh Token" }, "refresh").kind).toBe(AUTH_ERROR.SESSION_EXPIRED);
@@ -87,42 +96,57 @@ describe("classifyAuthError", () => {
 });
 
 describe("auth client", () => {
-  it("sends the code: POST /auth/v1/otp with apikey, lower-cased email, create_user", async () => {
-    const f = scriptedFetch(res(200, {}));
+  it("sign-up: POST /auth/v1/signup with apikey + lower-cased email; no session while unconfirmed", async () => {
+    const f = scriptedFetch(res(200, { id: "u-1", email: "mark@example.com", confirmation_sent_at: "2026-09-21T00:00:00Z" }));
     const c = createAuthClient({ url: URL + "/", anonKey: KEY, fetchImpl: f });
-    await expect(c.sendEmailCode(" Mark@Example.com ")).resolves.toEqual({ email: "mark@example.com" });
-    expect(f.calls[0].url).toBe(`${URL}/auth/v1/otp`);
+    await expect(c.signUp(" Mark@Example.com ", PW)).resolves.toEqual({ email: "mark@example.com", session: null });
+    expect(f.calls[0].url).toBe(`${URL}/auth/v1/signup`);
     expect(f.calls[0].init.headers.apikey).toBe(KEY);
-    expect(f.calls[0].body).toEqual({ email: "mark@example.com", create_user: true });
+    expect(f.calls[0].body).toEqual({ email: "mark@example.com", password: PW });
   });
 
-  it("does not spend a (rate-limited) email on an obvious typo", async () => {
+  it("does not spend a (rate-limited) email on an obvious typo or a short password", async () => {
     const f = scriptedFetch();
     const c = createAuthClient({ url: URL, anonKey: KEY, fetchImpl: f });
-    await expect(c.sendEmailCode("mark@")).rejects.toMatchObject({ kind: AUTH_ERROR.INVALID_EMAIL });
+    await expect(c.signUp("mark@", PW)).rejects.toMatchObject({ kind: AUTH_ERROR.INVALID_EMAIL });
+    await expect(c.signUp("mark@example.com", "short")).rejects.toMatchObject({ kind: AUTH_ERROR.WEAK_PASSWORD });
     expect(f).not.toHaveBeenCalled();
   });
 
   it("reports not_configured instead of calling out when the key is missing", async () => {
     const f = scriptedFetch();
     const c = createAuthClient({ url: URL, anonKey: "", fetchImpl: f });
-    await expect(c.sendEmailCode("mark@example.com")).rejects.toMatchObject({ kind: AUTH_ERROR.NOT_CONFIGURED });
+    await expect(c.signIn("mark@example.com", PW)).rejects.toMatchObject({ kind: AUTH_ERROR.NOT_CONFIGURED });
     expect(f).not.toHaveBeenCalled();
   });
 
-  it("verifies the code: POST /auth/v1/verify type=email → session", async () => {
+  it("sign-in: POST /auth/v1/token?grant_type=password → session", async () => {
     const f = scriptedFetch(res(200, tokenBody()));
     const c = createAuthClient({ url: URL, anonKey: KEY, fetchImpl: f, now: () => 1_000 });
-    const s = await c.verifyEmailCode("mark@example.com", "123 456");
-    expect(f.calls[0].url).toBe(`${URL}/auth/v1/verify`);
-    expect(f.calls[0].body).toEqual({ type: "email", email: "mark@example.com", token: "123456" });
+    const s = await c.signIn("Mark@example.com", PW);
+    expect(f.calls[0].url).toBe(`${URL}/auth/v1/token?grant_type=password`);
+    expect(f.calls[0].body).toEqual({ email: "mark@example.com", password: PW });
     expect(s).toEqual({ accessToken: "at1", refreshToken: "rt1", expiresAt: 1_000 + 3_600_000, user: { id: "u-1", email: "mark@example.com" } });
+  });
+
+  it("sign-in before clicking the confirmation link → email_not_confirmed", async () => {
+    const f = scriptedFetch(res(400, { error_code: "email_not_confirmed", msg: "Email not confirmed" }));
+    const c = createAuthClient({ url: URL, anonKey: KEY, fetchImpl: f });
+    await expect(c.signIn("mark@example.com", PW)).rejects.toMatchObject({ kind: AUTH_ERROR.EMAIL_NOT_CONFIRMED });
+  });
+
+  it("resend confirmation: POST /auth/v1/resend type=signup", async () => {
+    const f = scriptedFetch(res(200, {}));
+    const c = createAuthClient({ url: URL, anonKey: KEY, fetchImpl: f });
+    await c.resendConfirmation("mark@example.com");
+    expect(f.calls[0].url).toBe(`${URL}/auth/v1/resend`);
+    expect(f.calls[0].body).toEqual({ type: "signup", email: "mark@example.com" });
   });
 
   it("network failure → network error (not a crash)", async () => {
     const f = scriptedFetch(new TypeError("Failed to fetch"));
     const c = createAuthClient({ url: URL, anonKey: KEY, fetchImpl: f });
-    await expect(c.sendEmailCode("mark@example.com")).rejects.toMatchObject({ kind: AUTH_ERROR.NETWORK });
+    await expect(c.signIn("mark@example.com", PW)).rejects.toMatchObject({ kind: AUTH_ERROR.NETWORK });
   });
 
   it("sign-out sends the bearer token and only revokes this device", async () => {
@@ -140,11 +164,11 @@ describe("session manager", () => {
     return { t, sm: createSessionManager({ client, now: () => t.now }) };
   }
 
-  it("signs in with the code and persists the session (survives a worker restart)", async () => {
+  it("signs in and persists the session (survives a worker restart)", async () => {
     const f = scriptedFetch(res(200, tokenBody()));
     const { sm } = setup(f);
     await expect(sm.getState()).resolves.toEqual({ signedIn: false });
-    await expect(sm.signInWithCode("mark@example.com", "123456")).resolves.toMatchObject({ signedIn: true, email: "mark@example.com" });
+    await expect(sm.signIn("mark@example.com", PW)).resolves.toMatchObject({ signedIn: true, email: "mark@example.com" });
 
     // A brand-new manager (= service worker restarted) sees the same session.
     const { sm: sm2 } = setup(scriptedFetch());
@@ -153,7 +177,7 @@ describe("session manager", () => {
 
   it("getState never exposes tokens to the page", async () => {
     const { sm } = setup(scriptedFetch(res(200, tokenBody())));
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     const state = await sm.getState();
     expect(JSON.stringify(state)).not.toMatch(/at1|rt1/);
   });
@@ -161,7 +185,7 @@ describe("session manager", () => {
   it("returns the stored token while it is fresh — no network", async () => {
     const f = scriptedFetch(res(200, tokenBody()));
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000 - REFRESH_MARGIN_MS - 1;
     await expect(sm.getAccessToken()).resolves.toBe("at1");
     expect(f).toHaveBeenCalledTimes(1);
@@ -170,7 +194,7 @@ describe("session manager", () => {
   it("refreshes a minute before expiry and stores the rotated tokens", async () => {
     const f = scriptedFetch(res(200, tokenBody()), res(200, tokenBody({ access: "at2", refresh: "rt2" })));
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000 - REFRESH_MARGIN_MS + 1;
     await expect(sm.getAccessToken()).resolves.toBe("at2");
     expect(f.calls[1].url).toBe(`${URL}/auth/v1/token?grant_type=refresh_token`);
@@ -186,7 +210,7 @@ describe("session manager", () => {
       return res(200, tokenBody({ access: "at2", refresh: "rt2" }));
     });
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000;
     const all = Promise.all([sm.getAccessToken(), sm.getAccessToken(), sm.getAccessToken()]);
     await Promise.resolve();
@@ -198,7 +222,7 @@ describe("session manager", () => {
   it("a rejected refresh token signs the user out", async () => {
     const f = scriptedFetch(res(200, tokenBody()), res(400, { error: "invalid_grant", error_description: "Invalid Refresh Token: Already Used" }));
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000;
     await expect(sm.getAccessToken()).rejects.toMatchObject({ kind: AUTH_ERROR.SESSION_EXPIRED });
     await expect(sm.getState()).resolves.toEqual({ signedIn: false });
@@ -207,7 +231,7 @@ describe("session manager", () => {
   it("a network blip during refresh does NOT sign the user out", async () => {
     const f = scriptedFetch(res(200, tokenBody()), new TypeError("Failed to fetch"));
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000;
     await expect(sm.getAccessToken()).rejects.toMatchObject({ kind: AUTH_ERROR.NETWORK });
     await expect(sm.getState()).resolves.toMatchObject({ signedIn: true });
@@ -225,7 +249,7 @@ describe("session manager", () => {
       res(204) // logout
     );
     const { sm, t } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     t.now = 3_600_000;
     const pending = sm.getAccessToken();
     await sm.signOut();
@@ -238,16 +262,31 @@ describe("session manager", () => {
   it("sign-out clears locally even when the server can't be reached", async () => {
     const f = scriptedFetch(res(200, tokenBody()), new TypeError("offline"));
     const { sm } = setup(f);
-    await sm.signInWithCode("mark@example.com", "123456");
+    await sm.signIn("mark@example.com", PW);
     await expect(sm.signOut()).resolves.toEqual({ signedIn: false });
     await expect(sm.getState()).resolves.toEqual({ signedIn: false });
   });
 
-  it("a wrong code stores nothing", async () => {
-    const f = scriptedFetch(res(403, { error_code: "otp_expired", msg: "Token has expired or is invalid" }));
+  it("a wrong password stores nothing", async () => {
+    const f = scriptedFetch(res(400, { error_code: "invalid_credentials", msg: "Invalid login credentials" }));
     const { sm } = setup(f);
-    await expect(sm.signInWithCode("mark@example.com", "000000")).rejects.toMatchObject({ kind: AUTH_ERROR.INVALID_CODE });
+    await expect(sm.signIn("mark@example.com", "wrong-password")).rejects.toMatchObject({ kind: AUTH_ERROR.INVALID_CREDENTIALS });
     expect(await storedSession()).toBeUndefined();
+  });
+
+  it("sign-up with confirmation on: nothing stored, UI told to check the inbox", async () => {
+    const f = scriptedFetch(res(200, { id: "u-1", email: "mark@example.com" }));
+    const { sm } = setup(f);
+    await expect(sm.signUp("mark@example.com", PW)).resolves.toEqual({ signedIn: false, needsConfirmation: true, email: "mark@example.com" });
+    expect(await storedSession()).toBeUndefined();
+    await expect(sm.getState()).resolves.toEqual({ signedIn: false });
+  });
+
+  it("the password is never written to storage", async () => {
+    const { sm } = setup(scriptedFetch(res(200, tokenBody())));
+    await sm.signIn("mark@example.com", PW);
+    const all = await getLocal(null);
+    expect(JSON.stringify(all)).not.toContain(PW);
   });
 
   it("getAccessToken when signed out → not_signed_in, no network", async () => {

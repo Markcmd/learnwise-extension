@@ -257,11 +257,9 @@ input[type="email"] {
   color: var(--lw-text);
   font: inherit;
 }
+.acct-fields { display: grid; gap: 10px; max-width: 360px; }
 .acct-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; max-width: 520px; }
-.acct-row input { flex: 1 1 220px; min-width: 0; }
-.acct-code { letter-spacing: 0.25em; max-width: 180px; }
-.acct-links { margin-top: 10px; }
-.acct-links button { padding: 4px 10px; font-weight: 500; font-size: 12.5px; }
+.acct-actions { margin-top: 12px; }
 .acct-who { margin: 0 0 12px; }
 .acct-status { font-size: 12.5px; color: var(--lw-text-dim); margin-top: 10px; min-height: 1em; }
 .acct-status.is-error { color: var(--lw-danger); }

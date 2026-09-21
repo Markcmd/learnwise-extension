@@ -79,12 +79,23 @@ export function createSessionManager({ client, now = Date.now }) {
       return s ? { signedIn: true, email: s.user?.email ?? null, userId: s.user?.id ?? null } : { signedIn: false };
     },
 
-    async sendCode(email) {
-      return client.sendEmailCode(email);
+    /** Create an account; normally returns { needsConfirmation: true } (a link was emailed). */
+    async signUp(email, password) {
+      const { email: normalized, session } = await client.signUp(email, password);
+      if (session) {
+        // Only happens if "Confirm email" is off in Supabase — then we're simply signed in.
+        await write(session);
+        return { signedIn: true, email: session.user?.email ?? normalized, userId: session.user?.id ?? null };
+      }
+      return { signedIn: false, needsConfirmation: true, email: normalized };
     },
 
-    async signInWithCode(email, code) {
-      const session = await client.verifyEmailCode(email, code);
+    async resendConfirmation(email) {
+      return client.resendConfirmation(email);
+    },
+
+    async signIn(email, password) {
+      const session = await client.signIn(email, password);
       await write(session);
       return { signedIn: true, email: session.user?.email ?? null, userId: session.user?.id ?? null };
     },

@@ -141,30 +141,31 @@
       <div id="deckList" class="deck-list"></div>
     </section>
 
-    <!-- v2 B1: account (email one-time-code sign-in). Hidden until FEATURE_ACCOUNTS
-         in settingsWindow.js is true; during development open this page with ?accounts=1. -->
+    <!-- v2 B1: account (email + password; a confirmation link is emailed on sign-up).
+         Hidden until FEATURE_ACCOUNTS in settingsWindow.js is true; during development
+         open this page with ?accounts=1. -->
     <section class="card" id="accountCard" hidden>
       <h2>Account</h2>
-      <p class="desc">Optional. Sign in with your email to use smart translations. Your word bank still stays on this device.</p>
+      <p class="desc">Optional. Sign in to use smart translations. Your word bank still stays on this device.</p>
 
-      <div id="acctSignedOut">
-        <form id="acctEmailForm" class="acct-row" novalidate>
-          <input id="acctEmail" type="email" placeholder="you@example.com" autocomplete="email" spellcheck="false" required />
-          <button id="acctSendCode" class="btn-primary" type="submit">Email me a code</button>
-        </form>
+      <form id="acctForm" novalidate>
+        <div class="acct-fields">
+          <input id="acctEmail" type="email" placeholder="Email" autocomplete="email" spellcheck="false" required />
+          <input id="acctPassword" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" required />
+        </div>
+        <div class="acct-row acct-actions">
+          <button id="acctSignIn" class="btn-primary" type="submit">Sign in</button>
+          <button id="acctSignUp" type="button">Create account</button>
+        </div>
+      </form>
 
-        <form id="acctCodeForm" novalidate hidden>
-          <p class="desc">We sent a sign-in code to <strong id="acctEmailShown"></strong>. Enter it below — it expires in a few minutes.</p>
-          <div class="acct-row">
-            <input id="acctCode" class="mono acct-code" type="text" inputmode="numeric" autocomplete="one-time-code"
-                   maxlength="12" placeholder="123456" spellcheck="false" required />
-            <button id="acctVerify" class="btn-primary" type="submit">Sign in</button>
-          </div>
-          <div class="acct-row acct-links">
-            <button id="acctResend" type="button">Resend code</button>
-            <button id="acctChangeEmail" type="button">Use a different email</button>
-          </div>
-        </form>
+      <div id="acctConfirm" hidden>
+        <p class="desc">We sent a confirmation link to <strong id="acctConfirmEmail"></strong>.
+          Click it, then come back here and sign in.</p>
+        <div class="acct-row">
+          <button id="acctBackToSignIn" class="btn-primary" type="button">I've confirmed — sign in</button>
+          <button id="acctResend" type="button">Resend email</button>
+        </div>
       </div>
 
       <div id="acctSignedIn" hidden>

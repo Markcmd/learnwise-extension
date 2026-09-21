@@ -108,10 +108,11 @@ export const MSG = {
   DELETE_WORD: "lw_delete_word",
   /** M2.6: clear the entire word bank + event log. */
   CLEAR_WORDBANK: "lw_clear_wordbank",
-  /** Account (v2, B1): email one-time-code sign-in, handled in the background worker. */
+  /** Account (v2, B1): email + password sign-in, handled in the background worker. */
   AUTH_GET_STATE: "lw_auth_get_state",
-  AUTH_SEND_CODE: "lw_auth_send_code",
-  AUTH_VERIFY_CODE: "lw_auth_verify_code",
+  AUTH_SIGN_UP: "lw_auth_sign_up",
+  AUTH_SIGN_IN: "lw_auth_sign_in",
+  AUTH_RESEND_CONFIRMATION: "lw_auth_resend_confirmation",
   AUTH_SIGN_OUT: "lw_auth_sign_out",
 };
 
