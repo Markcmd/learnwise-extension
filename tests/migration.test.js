@@ -5,6 +5,7 @@ import {
   migrateWordBank,
   migrateState,
   runMigration,
+  LEGACY_BYOK_STORAGE_KEYS,
 } from "../JSs/core/migration.js";
 import { getLocal, setLocal } from "../JSs/core/storage.js";
 import { CURRENT_SCHEMA_VERSION, STORAGE_KEYS } from "../JSs/core/constants.js";
@@ -143,5 +144,32 @@ describe("runMigration (IO)", () => {
     expect(res[STORAGE_KEYS.SCHEMA_VERSION]).toBe(CURRENT_SCHEMA_VERSION);
     expect(res[STORAGE_KEYS.WORDBANK].apple.firstSeenAt).toBe(1000);
     expect(await runMigration(NOW)).toBe(false); // already current
+  });
+
+  // BYOK（Bring Your Own Key，用户自带密钥）取消：遗留的密钥必须被删掉，
+  // 否则用户的 API 密钥会一直留在 chrome.storage.local 里。
+  it("清掉 BYOK 遗留的本地键（含 API 密钥），并把翻译来源退回 local", async () => {
+    await setLocal({
+      lw_openai_key: "sk-should-be-deleted",
+      lw_byok_keys: { openai: "sk-should-be-deleted-too" },
+      lw_byok_provider: "openai",
+      lw_byok_models: { openai: "gpt-4o-mini" },
+      lw_byok_base_url: "http://localhost:11434/v1",
+      lw_openai_model: "gpt-4o-mini",
+      [STORAGE_KEYS.TRANSLATION_SOURCE]: "byok",
+    });
+
+    expect(await runMigration(NOW)).toBe(true);
+
+    const res = await getLocal([...LEGACY_BYOK_STORAGE_KEYS, STORAGE_KEYS.TRANSLATION_SOURCE]);
+    for (const k of LEGACY_BYOK_STORAGE_KEYS) expect(k in res).toBe(false);
+    expect(res[STORAGE_KEYS.TRANSLATION_SOURCE]).toBe("local");
+  });
+
+  it("翻译来源是 local 时不动它", async () => {
+    await setLocal({ [STORAGE_KEYS.TRANSLATION_SOURCE]: "local" });
+    expect(await runMigration(NOW)).toBe(true);
+    const res = await getLocal([STORAGE_KEYS.TRANSLATION_SOURCE]);
+    expect(res[STORAGE_KEYS.TRANSLATION_SOURCE]).toBe("local");
   });
 });

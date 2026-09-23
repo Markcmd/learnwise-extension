@@ -109,9 +109,10 @@ Source copy: **`docs/store-permission-justifications.md`**.
 ## Notes / gotchas
 
 - **Keep manifest, policy, and listing in agreement.** They're aligned right now
-  (v1.0.13, fully offline, BYOK "coming soon"). If you later enable BYOK
-  (`FEATURE_BYOK=true`), you must re-add the provider `host_permissions`, restore
-  the active-BYOK wording in the policy + listing, bump the version, and
+  (v1.0.13, fully offline, smart translation "coming soon"). BYOK（用户自带密钥）
+  已于 2026-09-23 取消，代码已删除；v2 开启服务端智能翻译时，要加的是
+  LearnWise 后端域名的 host 权限（不是各模型厂商的），更新隐私政策与商店文案里
+  「数据发往何处」的说法，bump the version, and
   re-submit.
 - **Version bumps:** every store update needs a higher `manifest.json` `version`.
 - **Screenshots are English-captioned.** Optional to redo in Chinese; cosmetic.

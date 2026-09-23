@@ -68,10 +68,10 @@ describe("mergeTranslationsIntoBank", () => {
 });
 
 describe("normalizeSource", () => {
-  it("defaults unknown values to local; maps legacy 'api' to 'byok'", () => {
+  it("defaults unknown values to local; 旧的 'api' / 'byok' 都归一成 local（BYOK 已取消）", () => {
     expect(normalizeSource("local")).toBe("local");
-    expect(normalizeSource("api")).toBe("byok"); // legacy value (pre-M1.4)
-    expect(normalizeSource("byok")).toBe("byok");
+    expect(normalizeSource("api")).toBe("local"); // 取消 BYOK 前的旧值
+    expect(normalizeSource("byok")).toBe("local");
     expect(normalizeSource("nonsense")).toBe("local");
     expect(normalizeSource(undefined)).toBe("local");
   });

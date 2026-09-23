@@ -5,15 +5,11 @@
 // HTMLs/settingsWindow.html. It deliberately does NOT go through the
 // esbuild bundle, so the settings UI works without `npm run build`.
 //
-// D-001: the "smart translations (BYO key)" form is gated behind
-// FEATURE_BYOK. The form markup currently shows a "coming soon" card
-// instead. The authoritative translation logic still lives in the core
-// modules + background worker and is untouched — re-enabling the UI means
-// restoring the form markup and flipping this flag back to true.
+// 智能翻译在设置页显示为 "coming soon" 卡片。BYOK（用户自带密钥）已取消，
+// v2 改为「登录 LearnWise 账号即可用」，届时这张卡片换成账号与额度信息。
 // =====================================================================
 
 // ---- feature flags ----
-const FEATURE_BYOK = false; // D-001 — smart translations hidden for now.
 // v2 B1 — account sign-in card. Off until the v2 backend ships (the live v1
 // promises "no server"). During development open the page with ?accounts=1.
 const FEATURE_ACCOUNTS = false;

@@ -70,42 +70,14 @@ async function shouldLogFullUrl() {
 const PAGE_LOGGED = new Set();
 
 // ---------------------------------------------------------------------
-// Translation routing: cache → (byok | local). The page-level cache dedupes
+// Translation routing: cache → (managed | local). The page-level cache dedupes
 // repeated lookups of the same word across scroll passes; the word bank
 // caches meanings permanently, so each word is fetched at most once.
 //   • local   → offline ECDICT dictionary
-//   • byok    → the user's OpenAI key, via the background worker (CORS);
-//               any word the model doesn't return falls back to local
-//   • managed → v2 (not built) → local
+//   • managed → v2 的服务端翻译代理（B3 未完成 → 暂时退回 local）
+// BYOK（用户自带密钥）已取消：扩展端不再直接调模型。
 // ---------------------------------------------------------------------
 const PAGE_MEANING_CACHE = new Map();
-
-// Warn the user at most once per page if smart translation degrades to local.
-let BYOK_WARNED = false;
-function warnByokOnce(message) {
-  if (BYOK_WARNED) return;
-  BYOK_WARNED = true;
-  showLearnWiseToast(`LearnWise: ${message} Using the local dictionary.`);
-}
-
-/** Ask the background worker to translate via the user's OpenAI key. */
-async function fetchViaByok(words, sentence) {
-  try {
-    const resp = await chrome.runtime.sendMessage({
-      type: MSG.TRANSLATE_BYOK,
-      words,
-      sentence,
-    });
-    if (resp && resp.ok) return resp.translations || {};
-    warnByokOnce(resp?.error?.message || "Smart translation failed.");
-    return {};
-  } catch (e) {
-    // Extension-context-invalidated etc. bubble up to the pass error handler.
-    if (String(e?.message || e).includes("Extension context invalidated")) throw e;
-    warnByokOnce("Smart translation is unavailable.");
-    return {};
-  }
-}
 
 function cacheAndCollect(out, fetched) {
   for (const [w, d] of Object.entries(fetched)) {
@@ -126,19 +98,7 @@ async function fetchTranslations(words, sentence) {
   const source = await getTranslationSource();
   let remaining = toLookup;
 
-  if (source === "byok") {
-    const translations = await fetchViaByok(toLookup, sentence);
-    remaining = [];
-    for (const w of toLookup) {
-      const d = translations[w];
-      if (d && String(d.meaning || "").trim()) {
-        PAGE_MEANING_CACHE.set(w, d);
-        out[w] = d;
-      } else {
-        remaining.push(w); // model skipped it → fill the gap from local
-      }
-    }
-  } else if (source === "managed") {
+  if (source === "managed") {
     console.warn("[LearnWise] 'managed' translation is a v2 feature; using local dictionary.");
   }
 

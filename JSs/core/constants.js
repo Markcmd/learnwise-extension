@@ -12,17 +12,6 @@ export const STORAGE_KEYS = {
   PROMOTION_THRESHOLD: "lw_promotion_threshold",
   /** Privacy: capture full page URLs in the event log (opt-in). Domain-only by default. */
   LOG_FULL_URL: "lw_log_full_url",
-  /** BYO-key (legacy, M1.4 OpenAI-only): kept for back-compat migration into the maps below. */
-  OPENAI_KEY: "lw_openai_key",
-  OPENAI_MODEL: "lw_openai_model",
-  /** BYO-key (multi-provider): which provider is active (openai|anthropic|openrouter|custom). */
-  BYOK_PROVIDER: "lw_byok_provider",
-  /** BYO-key: per-provider API keys { [providerId]: key } — stored locally only, never logged. */
-  BYOK_KEYS: "lw_byok_keys",
-  /** BYO-key: per-provider model choice { [providerId]: model }. */
-  BYOK_MODELS: "lw_byok_models",
-  /** BYO-key: base URL for the "custom" (OpenAI-compatible) provider. */
-  BYOK_BASE_URL: "lw_byok_base_url",
   /** Onboarding (M1.5): whether the first-run vocabulary calibration is done. */
   ONBOARDED: "lw_onboarded",
   /** Onboarding: the estimated known-vocabulary size (frequency rank threshold). */
@@ -38,7 +27,7 @@ export const STORAGE_KEYS = {
 };
 
 /** Current data schema version. Bump + add a migration step when the shape changes. */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2; // v2：清理 BYOK 遗留的本地密钥
 
 /** Familiarity at/above which we stop glossing a word. */
 export const STOP_GLOSS_LEVEL = 90;
@@ -77,32 +66,17 @@ export const MAX_RECENT_CONTEXTS = 5;
 /**
  * Valid translation backends (DESIGN.md META.translation_source):
  *  - local:   offline ECDICT dictionary (default, free, no key)
- *  - byok:    bring-your-own OpenAI key (M1.4, free — user pays OpenAI)
- *  - managed: paid hosted endpoint (v2, not built yet)
- * Legacy value "api" is treated as "byok" (see normalizeSource).
+ *  - managed: LearnWise 账号的服务端翻译代理（v2；试用额度 + 订阅）
+ * 取消 BYOK（Bring Your Own Key，用户自带密钥）后，扩展端不再直接调模型。
+ * 旧值 "api" / "byok" 都归一成 "local"（见 normalizeSource）。
  */
-export const TRANSLATION_SOURCES = ["local", "byok", "managed"];
-
-// ---------------------------------------------------------------------
-// M1.4 — BYO-key OpenAI translation
-// ---------------------------------------------------------------------
-
-/** OpenAI Chat Completions endpoint (called from the background worker). */
-export const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
-
-/** Models the user can pick from in settings; first entry is the default. */
-export const OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"];
-export const DEFAULT_OPENAI_MODEL = OPENAI_MODELS[0];
+export const TRANSLATION_SOURCES = ["local", "managed"];
 
 /** Target gloss language (English→Chinese at launch; pluggable later). */
 export const TARGET_LANGUAGE = "Simplified Chinese";
 
-/** Network timeout (ms) for a BYO-key translation request. */
-export const OPENAI_TIMEOUT_MS = 20000;
-
 /** Runtime message types between content script and background worker. */
 export const MSG = {
-  TRANSLATE_BYOK: "lw_translate_byok",
   DEMOTE_WORD: "lw_demote_word",
   /** M2.6: delete one word (bank record + its events). */
   DELETE_WORD: "lw_delete_word",

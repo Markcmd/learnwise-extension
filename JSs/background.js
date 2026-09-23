@@ -9,9 +9,6 @@ import { getLocal, setLocal } from "./core/storage.js";
 import { STORAGE_KEYS, CURRENT_SCHEMA_VERSION, MSG, IDB } from "./core/constants.js";
 import { runMigration } from "./core/migration.js";
 import { pruneEvents } from "./core/pruning.js";
-import { validateApiKey } from "./core/translation.js";
-import { getByokConfig } from "./core/byokSettings.js";
-import { fetchByokTranslations, LlmError } from "./dom/llm.js";
 import { getWordBank, setWordBank, demoteWord, deleteWord } from "./core/wordbank.js";
 import { deleteEventsForWord } from "./core/events.js";
 import { clearStore } from "./core/idb.js";
@@ -87,41 +84,6 @@ chrome.runtime.onStartup?.addListener(() => {
 });
 
 // ---------------------------------------------------------------------
-// BYO-key translation handler
-// ---------------------------------------------------------------------
-// The OpenAI call must run here (service-worker origin + host_permissions)
-// because a content script's cross-origin fetch is blocked by CORS. The
-// content script sends words; we read the user's key/model from local
-// storage (the key never travels through the message), call OpenAI, and
-// return either translations or a classified error so the page can fall
-// back to the local dictionary.
-async function handleByokTranslate(msg) {
-  const { providerId, apiKey, model, baseUrl } = await getByokConfig();
-
-  const fmt = validateApiKey(apiKey, providerId);
-  if (!fmt.valid) {
-    return { ok: false, error: { kind: "auth", message: fmt.reason, retriable: false, fallbackToLocal: true } };
-  }
-
-  try {
-    const translations = await fetchByokTranslations({
-      providerId,
-      words: msg?.words,
-      apiKey,
-      model,
-      baseUrl,
-      sentence: msg?.sentence,
-    });
-    return { ok: true, translations };
-  } catch (e) {
-    const error =
-      e instanceof LlmError
-        ? e.info
-        : { kind: "unknown", message: String(e?.message || e), retriable: false, fallbackToLocal: true };
-    return { ok: false, error };
-  }
-}
-
 // Demote a "known" word back into the glossing range and clear its events so
 // derived familiarity restarts (the user forgot it and wants it checked again).
 async function handleDemoteWord(msg) {
@@ -217,15 +179,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === MSG.TRANSLATE_BYOK) {
-    handleByokTranslate(msg).then(sendResponse, (e) => {
-      sendResponse({
-        ok: false,
-        error: { kind: "unknown", message: String(e?.message || e), retriable: false, fallbackToLocal: true },
-      });
-    });
-    return true; // keep the message channel open for the async response
-  }
   if (msg?.type === MSG.DEMOTE_WORD) {
     handleDemoteWord(msg).then(sendResponse, (e) =>
       sendResponse({ ok: false, error: String(e?.message || e) })

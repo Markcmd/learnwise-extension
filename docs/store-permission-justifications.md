@@ -10,8 +10,9 @@ Current manifest (v1.0.13) declares:
 - content script `matches`: `<all_urls>`
 - **No host permissions.** (Dropped in 4.2: `activeTab`. Dropped in the
   pre-launch review: the OpenAI/Anthropic/OpenRouter `host_permissions` and the
-  broad `optional_host_permissions` — the BYOK "smart translation" feature ships
-  disabled in v1, so those were unused. They'll return when BYOK ships.)
+  broad `optional_host_permissions` — the "smart translation" feature ships
+  disabled in v1, so those were unused. BYOK（用户自带密钥）已取消，v2 只访问
+  LearnWise 自己的后端域名，不再需要各模型厂商的 host 权限。)
 
 ---
 

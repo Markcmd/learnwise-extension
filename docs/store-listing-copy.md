@@ -155,7 +155,8 @@ LearnWise 把你的词库、阅读记录和设置只保存在你自己的设备�
 - The description mentions the **English–Chinese** dictionary (ECDICT) because
   that's what actually ships — keep this accurate; if you broaden languages
   later, update the copy.
-- BYOK smart translations ship **disabled** in v1 (D-001, `FEATURE_BYOK=false`),
+- Smart translations ship **disabled** in v1 (D-001). BYOK（Bring Your Own Key，用户自带密钥）
+  已于 2026-09-23 取消：v2 改为登录 LearnWise 账号使用服务端翻译代理，
   so the copy says "coming soon" — kept consistent with the in-app card, the
   privacy policy, and the manifest (provider host permissions were removed in the
   pre-launch review; see `dev-notes/problems/2026-06-30-pre-launch-review.md`).

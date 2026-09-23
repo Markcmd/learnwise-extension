@@ -54,7 +54,8 @@ transmitted anywhere.
 ### Planned: optional "smart" translations (not in this version)
 
 A future version may add optional AI-powered definitions. If it does, the feature
-will be strictly **opt-in** and will use an AI provider and an API key that
+will be strictly **opt-in** and will run through the LearnWise translation service on a LearnWise
+account (the earlier "bring your own API key" option was dropped on 2026-09-23); the words that
 **you** supply — sending only the word (and optionally one sentence of context)
 **directly from your browser to the provider you choose**, never through a
 LearnWise server. This feature is **not enabled in the current version**. This

@@ -6,9 +6,22 @@
 // it reads the stored schemaVersion, upgrades the bank shape if needed,
 // and writes it back — preserving every existing field.
 // =====================================================================
-import { getLocal, setLocal } from "./storage.js";
+import { getLocal, setLocal, removeLocal } from "./storage.js";
 import { STORAGE_KEYS, CURRENT_SCHEMA_VERSION } from "./constants.js";
 import { createWordRecord, deriveStatus, defaultSrs } from "./wordbank.js";
+
+/**
+ * BYOK（Bring Your Own Key，用户自带密钥）取消后要清掉的遗留本地键。
+ * 里面可能存着用户的 API 密钥 —— 升级时必须删除，不能留在 chrome.storage.local。
+ */
+export const LEGACY_BYOK_STORAGE_KEYS = [
+  "lw_openai_key",
+  "lw_openai_model",
+  "lw_byok_provider",
+  "lw_byok_keys",
+  "lw_byok_models",
+  "lw_byok_base_url",
+];
 
 /** Does the stored version need upgrading? */
 export function needsMigration(version) {
@@ -101,7 +114,11 @@ export function migrateState(state = {}, now = Date.now()) {
  * first-run seeding step would think a bank already exists.
  */
 export async function runMigration(now = Date.now()) {
-  const res = await getLocal([STORAGE_KEYS.SCHEMA_VERSION, STORAGE_KEYS.WORDBANK]);
+  const res = await getLocal([
+    STORAGE_KEYS.SCHEMA_VERSION,
+    STORAGE_KEYS.WORDBANK,
+    STORAGE_KEYS.TRANSLATION_SOURCE,
+  ]);
   if (!needsMigration(res[STORAGE_KEYS.SCHEMA_VERSION])) return false;
 
   const patch = { [STORAGE_KEYS.SCHEMA_VERSION]: CURRENT_SCHEMA_VERSION };
@@ -109,6 +126,16 @@ export async function runMigration(now = Date.now()) {
   if (existing && typeof existing === "object" && !Array.isArray(existing)) {
     patch[STORAGE_KEYS.WORDBANK] = migrateWordBank(existing, now);
   }
+  // BYOK 取消：把翻译来源从 byok/api 退回本地词典，免得指向一个已经不存在的通路。
+  const src = res[STORAGE_KEYS.TRANSLATION_SOURCE];
+  if (src === "byok" || src === "api") patch[STORAGE_KEYS.TRANSLATION_SOURCE] = "local";
   await setLocal(patch);
+  // 再删掉遗留的密钥（放在 setLocal 之后：即使删除失败，版本号也已推进，
+  // 下次启动不会重复迁移词库；密钥清理本身是 best-effort）。
+  try {
+    await removeLocal(LEGACY_BYOK_STORAGE_KEYS);
+  } catch (e) {
+    console.warn("[LearnWise] 清理 BYOK 遗留键失败：", e);
+  }
   return true;
 }
